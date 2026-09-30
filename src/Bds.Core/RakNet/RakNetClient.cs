@@ -120,10 +120,9 @@ public sealed class RakNetClient : IAsyncDisposable
                 if (reply is null) continue;
                 var r = new PacketReader(reply);
                 r.Skip(1 + 16 + 8);
-                var security = r.Bool();
-                if (security) r.Int32BE();
+                int? cookie = r.Bool() ? r.Int32BE() : null;
                 _mtu = Math.Min(r.UInt16BE(), mtu);
-                await SendRequest2Async(ct);
+                await SendRequest2Async(cookie, ct);
             }
             if (_mtu != 0) break;
         }
@@ -140,10 +139,12 @@ public sealed class RakNetClient : IAsyncDisposable
         await _connected.Task.WaitAsync(timeout.Token);
     }
 
-    async Task SendRequest2Async(CancellationToken ct)
+    async Task SendRequest2Async(int? cookie, CancellationToken ct)
     {
         var w = new PacketWriter();
         w.Byte(RakId.OpenConnectionRequest2).Bytes(RakBinary.Magic);
+        // Servers with RakNet security echo the cookie back; we send no challenge.
+        if (cookie is { } c) w.Int32BE(c).Bool(false);
         RakBinary.WriteAddress(w, _remote);
         w.UInt16BE((ushort)_mtu).Int64BE(_guid);
         for (var attempt = 0; attempt < 3; attempt++)

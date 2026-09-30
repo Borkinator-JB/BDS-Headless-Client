@@ -24,7 +24,7 @@ public sealed class MinecraftServicesClient(HttpClient http)
         req.Headers.TryAddWithoutValidation("Authorization", xsts.Header);
         req.Headers.Add("Client-Version", "1.21.0");
         using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode) throw new AuthException($"Minecraft authentication failed ({(int)res.StatusCode})");
+        if (!res.IsSuccessStatusCode) throw new AuthException($"Minecraft authentication failed ({(int)res.StatusCode}): {await ErrorTextAsync(res, ct)}");
         var body = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
         return body?["chain"]?.AsArray().Select(n => n!.GetValue<string>()).ToList()
             ?? throw new AuthException("No chain in Minecraft authentication response");
@@ -39,27 +39,51 @@ public sealed class MinecraftServicesClient(HttpClient http)
             ["XboxToken"] = playFabXsts.Header,
         };
         using var res = await http.PostAsJsonAsync(PlayFabUrl, body, ct);
-        if (!res.IsSuccessStatusCode) throw new AuthException($"PlayFab login failed ({(int)res.StatusCode})");
+        if (!res.IsSuccessStatusCode) throw new AuthException($"PlayFab login failed ({(int)res.StatusCode}): {await ErrorTextAsync(res, ct)}");
         var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
         return json?["data"]?["SessionTicket"]?.GetValue<string>() ?? throw new AuthException("No PlayFab session ticket");
     }
 
+    // Tried in order. Some versions/platform combos are rejected by the service.
+    static readonly (string Platform, string Store)[] DeviceProfiles =
+    [
+        ("Windows10", "uwp.store"),
+        ("Android", "android.googleplay"),
+    ];
+
     public async Task<McToken> StartSessionAsync(string playFabTicket, string gameVersion, Guid deviceId, CancellationToken ct)
+    {
+        AuthException? last = null;
+        foreach (var (platform, store) in DeviceProfiles)
+        {
+            try
+            {
+                return await StartSessionAsync(playFabTicket, gameVersion, deviceId, platform, store, ct);
+            }
+            catch (AuthException e)
+            {
+                last = e;
+            }
+        }
+        throw last!;
+    }
+
+    async Task<McToken> StartSessionAsync(string playFabTicket, string gameVersion, Guid deviceId, string platform, string store, CancellationToken ct)
     {
         var body = new JsonObject
         {
             ["device"] = new JsonObject
             {
                 ["applicationType"] = "MinecraftPE",
-                ["capabilities"] = new JsonArray("RayTracing"),
+                ["capabilities"] = new JsonArray(),
                 ["gameVersion"] = gameVersion,
                 ["id"] = deviceId.ToString(),
                 ["memory"] = "8589934592",
-                ["platform"] = "Android",
+                ["platform"] = platform,
                 ["playFabTitleId"] = AuthConstants.PlayFabTitleId,
-                ["storePlatform"] = "android.googleplay",
+                ["storePlatform"] = store,
                 ["treatmentOverrides"] = null,
-                ["type"] = "Android",
+                ["type"] = platform,
             },
             ["user"] = new JsonObject
             {
@@ -71,11 +95,19 @@ public sealed class MinecraftServicesClient(HttpClient http)
             },
         };
         using var res = await http.PostAsJsonAsync(SessionStartUrl, body, ct);
-        if (!res.IsSuccessStatusCode) throw new AuthException($"Minecraft services session failed ({(int)res.StatusCode})");
+        if (!res.IsSuccessStatusCode)
+            throw new AuthException($"Minecraft services session failed ({(int)res.StatusCode}, {platform}, version {gameVersion}): {await ErrorTextAsync(res, ct)}");
         var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct))?["result"];
         return new McToken(
             json?["authorizationHeader"]?.GetValue<string>() ?? throw new AuthException("No MCToken"),
             json["validUntil"] is { } v ? DateTimeOffset.Parse(v.GetValue<string>()) : DateTimeOffset.UtcNow.AddHours(1));
+    }
+
+    static async Task<string> ErrorTextAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        var text = (await res.Content.ReadAsStringAsync(ct)).Trim();
+        if (text.Length == 0) return "no details";
+        return text.Length > 300 ? text[..300] : text;
     }
 
     /// <summary>Newer login token (1.21.90+). Optional: servers still accept the legacy chain.</summary>
