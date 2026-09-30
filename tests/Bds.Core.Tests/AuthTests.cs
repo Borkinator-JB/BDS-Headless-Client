@@ -69,6 +69,14 @@ public class AuthTests
         Assert.Equal(("Bot", "42"), LoginBuilder.ReadIdentity(modern));
     }
 
+    [Theory]
+    [InlineData("26.51", "26.51.0")]
+    [InlineData("1.21.100", "1.21.100")]
+    [InlineData("v1.21", "1.21.0")]
+    [InlineData("", "1.21.0")]
+    public void Version_Is_Normalized(string input, string expected) =>
+        Assert.Equal(expected, MinecraftServicesClient.NormalizeVersion(input));
+
     [Fact]
     public void Ecdh_Shared_Secret_Matches()
     {

@@ -53,6 +53,7 @@ public sealed class MinecraftServicesClient(HttpClient http)
 
     public async Task<McToken> StartSessionAsync(string playFabTicket, string gameVersion, Guid deviceId, CancellationToken ct)
     {
+        gameVersion = NormalizeVersion(gameVersion);
         AuthException? last = null;
         foreach (var (platform, store) in DeviceProfiles)
         {
@@ -101,6 +102,15 @@ public sealed class MinecraftServicesClient(HttpClient http)
         return new McToken(
             json?["authorizationHeader"]?.GetValue<string>() ?? throw new AuthException("No MCToken"),
             json["validUntil"] is { } v ? DateTimeOffset.Parse(v.GetValue<string>()) : DateTimeOffset.UtcNow.AddHours(1));
+    }
+
+    /// <summary>The service only accepts "major.minor.patch". Servers may report "26.51" or "v1.21.x".</summary>
+    internal static string NormalizeVersion(string version)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(version, @"\d+(\.\d+){0,3}");
+        var parts = (match.Success ? match.Value : "1.21.0").Split('.').ToList();
+        while (parts.Count < 3) parts.Add("0");
+        return string.Join('.', parts);
     }
 
     static async Task<string> ErrorTextAsync(HttpResponseMessage res, CancellationToken ct)
