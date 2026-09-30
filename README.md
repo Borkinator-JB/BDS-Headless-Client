@@ -41,7 +41,7 @@ Start the gateway from the main screen. It runs as a foreground service with a n
 ## First run
 
 1. **Account**: sign in. You get a code to enter on microsoft.com.
-2. **Servers**: add your server and press **Join**. If the host is a LAN or localhost address, also set **Public host** so friends outside your network can reach it.
+2. **Servers**: add your server (e.g. `exampleserver.com`, port `19132`) and press **Join**. Only if you enter a local address (`127.0.0.1`, `192.168.x.x`), open **Advanced** and set the public address friends should use.
 3. **Friends**: add friends by gamertag, or turn on auto accept.
 
 ## Security

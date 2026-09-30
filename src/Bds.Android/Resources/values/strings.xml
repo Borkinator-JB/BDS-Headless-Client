@@ -12,8 +12,10 @@
   <string name="name">Name</string>
   <string name="host">Host</string>
   <string name="port">Port</string>
-  <string name="public_host">Public host (optional)</string>
-  <string name="public_port">Public port (optional)</string>
+  <string name="public_host">Public host</string>
+  <string name="public_port">Public port</string>
+  <string name="advanced">Advanced</string>
+  <string name="public_hint">Only needed when Host is a local address (127.0.0.1, 192.168.x.x). Friends are sent here instead.</string>
   <string name="gamertag">Gamertag</string>
   <string name="sign_in">Sign in</string>
   <string name="sign_out">Sign out</string>

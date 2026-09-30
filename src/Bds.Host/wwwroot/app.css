@@ -84,3 +84,5 @@ button:disabled { opacity: .5; cursor: default; }
 
 #blazor-error-ui { display: none; position: fixed; bottom: 0; left: 0; right: 0; padding: .6rem 1rem; background: var(--warn); color: #000; }
 h1:focus { outline: none; }
+details.advanced { margin-bottom: .6rem; }
+details.advanced summary { cursor: pointer; margin-bottom: .4rem; }

@@ -38,8 +38,12 @@
         <label>Name <InputText @bind-Value="_form.Name" required /></label>
         <label>Host <InputText @bind-Value="_form.Host" required placeholder="play.example.com or 127.0.0.1" /></label>
         <label>Port <InputNumber @bind-Value="_form.Port" min="1" max="65535" /></label>
-        <label>Public host <InputText @bind-Value="_form.PublicHost" placeholder="Only if Host is a LAN or localhost address" /></label>
-        <label>Public port <InputNumber @bind-Value="_form.PublicPort" min="1" max="65535" /></label>
+        <details class="advanced" open="@(_form.PublicHost is not null || _form.PublicPort is not null)">
+            <summary>Advanced</summary>
+            <p class="muted">Only needed when Host is a local address (127.0.0.1, 192.168.x.x). Friends are sent here instead.</p>
+            <label>Public host <InputText @bind-Value="_form.PublicHost" placeholder="exampleserver.com" /></label>
+            <label>Public port <InputNumber @bind-Value="_form.PublicPort" min="1" max="65535" /></label>
+        </details>
         <div class="row">
             <button type="submit" class="primary">Save</button>
             @if (_form.Id != 0)

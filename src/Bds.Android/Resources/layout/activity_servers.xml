@@ -11,10 +11,16 @@
       android:hint="@string/host" android:inputType="textUri" />
   <EditText android:id="@+id/port" android:layout_width="match_parent" android:layout_height="wrap_content"
       android:hint="@string/port" android:inputType="number" android:text="19132" />
-  <EditText android:id="@+id/public_host" android:layout_width="match_parent" android:layout_height="wrap_content"
-      android:hint="@string/public_host" android:inputType="textUri" />
-  <EditText android:id="@+id/public_port" android:layout_width="match_parent" android:layout_height="wrap_content"
-      android:hint="@string/public_port" android:inputType="number" />
+  <CheckBox android:id="@+id/advanced" android:layout_width="wrap_content" android:layout_height="wrap_content"
+      android:text="@string/advanced" />
+  <LinearLayout android:id="@+id/advanced_fields" android:layout_width="match_parent" android:layout_height="wrap_content"
+      android:orientation="vertical" android:visibility="gone">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/public_hint" />
+    <EditText android:id="@+id/public_host" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:hint="@string/public_host" android:inputType="textUri" />
+    <EditText android:id="@+id/public_port" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:hint="@string/public_port" android:inputType="number" />
+  </LinearLayout>
   <com.google.android.material.button.MaterialButton android:id="@+id/add" android:layout_width="match_parent"
       android:layout_height="wrap_content" android:text="@string/add" />
 

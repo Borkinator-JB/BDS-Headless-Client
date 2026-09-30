@@ -28,6 +28,8 @@ public sealed class ServersActivity : AppCompatActivity
         list.ItemClick += async (_, e) => await Activate(_servers[e.Position]);
         list.ItemLongClick += async (_, e) => await Delete(_servers[e.Position]);
         FindViewById<Button>(Resource.Id.add)!.Click += async (_, _) => await Add();
+        FindViewById<CheckBox>(Resource.Id.advanced)!.CheckedChange += (_, e) =>
+            FindViewById(Resource.Id.advanced_fields)!.Visibility = e.IsChecked ? global::Android.Views.ViewStates.Visible : global::Android.Views.ViewStates.Gone;
     }
 
     protected override async void OnResume()
