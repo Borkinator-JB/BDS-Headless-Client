@@ -4,6 +4,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Provider;
+using Android.Views;
 using Android.Widget;
 using AndroidX.AppCompat.App;
 using AndroidX.Core.App;
@@ -13,7 +14,7 @@ using Bds.Core.Services;
 namespace Bds.Android;
 
 [Activity(Label = "@string/app_name", MainLauncher = true, LaunchMode = LaunchMode.SingleTop)]
-public sealed class MainActivity : AppCompatActivity
+public sealed class MainActivity : BaseActivity
 {
     TextView _status = null!;
     Button _toggle = null!;
@@ -26,7 +27,7 @@ public sealed class MainActivity : AppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        SetContentView(Resource.Layout.activity_main);
+        SetScreen(Resource.Layout.activity_main, showUp: false);
 
         _status = FindViewById<TextView>(Resource.Id.status)!;
         _toggle = FindViewById<Button>(Resource.Id.toggle)!;
@@ -60,6 +61,28 @@ public sealed class MainActivity : AppCompatActivity
     }
 
     void OnChanged() => RunOnUiThread(Refresh);
+
+    public override bool OnCreateOptionsMenu(IMenu? menu)
+    {
+        menu?.Add(0, 1, 0, "Log");
+        return true;
+    }
+
+    public override bool OnOptionsItemSelected(IMenuItem item)
+    {
+        if (item.ItemId != 1) return base.OnOptionsItemSelected(item);
+        var text = new TextView(this) { Text = AppLog.Text(), TextSize = 12 };
+        text.SetTextIsSelectable(true);
+        text.SetPadding(40, 20, 40, 20);
+        var scroll = new ScrollView(this);
+        scroll.AddView(text);
+        new AndroidX.AppCompat.App.AlertDialog.Builder(this)
+            .SetTitle("Log")!
+            .SetView(scroll)!
+            .SetPositiveButton("Close", (_, _) => { })!
+            .Show();
+        return true;
+    }
 
     void Refresh()
     {

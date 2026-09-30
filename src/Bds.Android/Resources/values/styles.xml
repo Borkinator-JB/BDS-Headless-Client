@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <style name="AppTheme" parent="Theme.Material3.DayNight">
+  <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
     <item name="colorPrimary">#2F7D32</item>
     <item name="colorOnPrimary">#FFFFFF</item>
   </style>

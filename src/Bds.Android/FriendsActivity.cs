@@ -11,8 +11,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Bds.Android;
 
-[Activity(Label = "@string/friends", ParentActivity = typeof(MainActivity))]
-public sealed class FriendsActivity : AppCompatActivity
+[Activity(Label = "@string/friends")]
+public sealed class FriendsActivity : BaseActivity
 {
     ArrayAdapter<string> _friendsAdapter = null!;
     ArrayAdapter<string> _requestsAdapter = null!;
@@ -25,8 +25,7 @@ public sealed class FriendsActivity : AppCompatActivity
     protected override async void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        SetContentView(Resource.Layout.activity_friends);
-        SupportActionBar?.SetDisplayHomeAsUpEnabled(true);
+        SetScreen(Resource.Layout.activity_friends);
 
         _error = FindViewById<TextView>(Resource.Id.error)!;
         _friendsAdapter = new ArrayAdapter<string>(this, global::Android.Resource.Layout.SimpleListItem1);
@@ -49,11 +48,18 @@ public sealed class FriendsActivity : AppCompatActivity
             input.Text = "";
         };
 
-        var auto = FindViewById<MaterialSwitch>(Resource.Id.auto_accept)!;
-        auto.Checked = await Settings.GetBoolAsync(SettingKeys.AutoAcceptFriends);
-        auto.CheckedChange += async (_, e) => await Settings.SetBoolAsync(SettingKeys.AutoAcceptFriends, e.IsChecked);
-
-        await Load();
+        try
+        {
+            await BdsApp.Bridge.InitializeAsync(CancellationToken.None);
+            var auto = FindViewById<MaterialSwitch>(Resource.Id.auto_accept)!;
+            auto.Checked = await Settings.GetBoolAsync(SettingKeys.AutoAcceptFriends);
+            auto.CheckedChange += async (_, e) => await Settings.SetBoolAsync(SettingKeys.AutoAcceptFriends, e.IsChecked);
+            await Load();
+        }
+        catch (Exception e)
+        {
+            ShowError(e);
+        }
     }
 
     async Task Load()
@@ -68,8 +74,9 @@ public sealed class FriendsActivity : AppCompatActivity
             _friends = (await BdsApp.Bridge.Friends.ListAsync(CancellationToken.None)).OrderBy(p => p.Gamertag).ToList();
             _requests = await BdsApp.Bridge.Friends.IncomingAsync(CancellationToken.None);
         }
-        catch (Exception e) when (e is XboxApiException or AuthException or HttpRequestException)
+        catch (Exception e)
         {
+            AppLog.Add($"Friends: {e}");
             ShowError(e.Message);
             return;
         }
@@ -95,8 +102,9 @@ public sealed class FriendsActivity : AppCompatActivity
         {
             await action();
         }
-        catch (Exception e) when (e is XboxApiException or AuthException or HttpRequestException)
+        catch (Exception e)
         {
+            AppLog.Add($"Friends: {e}");
             ShowError(e.Message);
             return;
         }

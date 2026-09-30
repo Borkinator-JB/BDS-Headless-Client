@@ -56,8 +56,6 @@ public sealed class XboxAccount(HttpClient http, ITokenStore store, ILogger<Xbox
         try
         {
             await GetXstsAsync(AuthConstants.XboxLiveRelyingParty, ct);
-            SetState(AccountState.SignedIn);
-            return true;
         }
         catch (AuthException e)
         {
@@ -65,6 +63,13 @@ public sealed class XboxAccount(HttpClient http, ITokenStore store, ILogger<Xbox
             SetState(AccountState.Error, e.Message);
             return false;
         }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            // Offline (e.g. at boot). Tokens refresh on the next call.
+            log.LogWarning("Resume offline: {Message}", e.Message);
+        }
+        SetState(AccountState.SignedIn);
+        return true;
     }
 
     public async Task<DeviceCodeInfo> BeginSignInAsync(CancellationToken ct)
@@ -119,13 +124,14 @@ public sealed class XboxAccount(HttpClient http, ITokenStore store, ILogger<Xbox
             log.LogInformation("Signed in as {Gamertag}", xsts.Gamertag);
             SetState(AccountState.SignedIn);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
         }
-        catch (Exception e) when (e is AuthException or HttpRequestException)
+        catch (Exception e)
         {
+            log.LogError(e, "Sign in failed");
             PendingCode = null;
-            SetState(AccountState.Error, e.Message);
+            SetState(AccountState.Error, e is AuthException ? e.Message : $"Sign in failed: {e.Message}");
         }
     }
 
