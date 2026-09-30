@@ -49,7 +49,7 @@ public sealed class GatewayService : Service
         }
 
         CreateChannel();
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.UpsideDownCake)
+        if (OperatingSystem.IsAndroidVersionAtLeast(34))
             StartForeground(NotificationId, BuildNotification(), ForegroundService.TypeSpecialUse);
         else
             StartForeground(NotificationId, BuildNotification());
@@ -60,7 +60,7 @@ public sealed class GatewayService : Service
             AcquireLocks();
             _cts = new CancellationTokenSource();
             var bridge = BdsApp.Bridge;
-            bridge.Changed += Notify;
+            bridge.Changed += UpdateNotification;
             _ = Task.Run(() => bridge.RunAsync(_cts.Token));
 
             _network = new NetworkCallback(bridge);
@@ -76,16 +76,16 @@ public sealed class GatewayService : Service
         _wakeLock!.Acquire();
 
         var wifi = (WifiManager)ApplicationContext!.GetSystemService(WifiService)!;
-        var mode = Build.VERSION.SdkInt >= BuildVersionCodes.Q ? WifiMode.FullLowLatency : WifiMode.FullHighPerf;
+        var mode = OperatingSystem.IsAndroidVersionAtLeast(29) ? WifiMode.FullLowLatency : WifiMode.FullHighPerf;
         _wifiLock = wifi.CreateWifiLock(mode, "bdsheadless:gateway");
         _wifiLock!.Acquire();
     }
 
-    void Notify()
+    void UpdateNotification()
     {
         if (DateTime.UtcNow - _lastNotify < NotifyThrottle) return;
         _lastNotify = DateTime.UtcNow;
-        NotificationManagerCompat.From(this).Notify(NotificationId, BuildNotification());
+        NotificationManagerCompat.From(this)!.Notify(NotificationId, BuildNotification());
     }
 
     Notification BuildNotification()
@@ -118,7 +118,7 @@ public sealed class GatewayService : Service
     public override void OnDestroy()
     {
         Running = false;
-        BdsApp.Bridge.Changed -= Notify;
+        BdsApp.Bridge.Changed -= UpdateNotification;
         _cts?.Cancel();
         _cts = null;
         if (_network is not null)

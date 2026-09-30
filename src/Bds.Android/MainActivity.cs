@@ -90,7 +90,7 @@ public sealed class MainActivity : AppCompatActivity
 
     void RequestNotificationPermission()
     {
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu
+        if (OperatingSystem.IsAndroidVersionAtLeast(33)
             && ContextCompat.CheckSelfPermission(this, Manifest.Permission.PostNotifications) != Permission.Granted)
             ActivityCompat.RequestPermissions(this, [Manifest.Permission.PostNotifications], 1);
     }

@@ -69,9 +69,9 @@ jobs:
       - name: Package
         env:
           NFPM_ARCH: ${{ matrix.nfpm }}
-          ARCH_DIR: linux-${{ matrix.arch }}
         run: |
           mkdir -p artifacts
+          cp -r dist/linux-${{ matrix.arch }} dist/package
           ./nfpm package -f build/linux/nfpm.yaml -p deb -t artifacts/
           ./nfpm package -f build/linux/nfpm.yaml -p rpm -t artifacts/
           tgz=bds-headless-$VERSION-linux-${{ matrix.arch }}

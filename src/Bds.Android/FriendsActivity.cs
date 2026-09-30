@@ -82,7 +82,7 @@ public sealed class FriendsActivity : AppCompatActivity
     }
 
     void ConfirmRemove(XboxPerson p) =>
-        new AlertDialog.Builder(this)
+        new AndroidX.AppCompat.App.AlertDialog.Builder(this)
             .SetMessage($"Remove {p.Gamertag}?")!
             .SetPositiveButton("Remove", async (_, _) => await Run(() => BdsApp.Bridge.Friends.RemoveAsync(p, CancellationToken.None)))!
             .SetNegativeButton("Cancel", (_, _) => { })!

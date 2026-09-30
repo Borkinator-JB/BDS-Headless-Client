@@ -8,7 +8,7 @@ description: Lets Xbox and PlayStation friends join a Minecraft Bedrock server.
 homepage: https://github.com/Borkinator-JB/BDS-Headless-Client
 license: MIT
 contents:
-  - src: ./dist/${ARCH_DIR}/
+  - src: ./dist/package/
     dst: /opt/bds-headless/
     type: tree
   - src: ./build/linux/bds-headless.service
