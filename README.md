@@ -70,7 +70,7 @@ Database changes: `dotnet tool restore`, then `dotnet ef migrations add <Name> -
 
 ## CI
 
-GitHub Actions builds every PR and push to `main`: tests, Linux (deb, rpm, tar.gz), Windows (setup + portable zip) and Android APK. Tagging `v*` creates a release.
+GitHub Actions builds every PR and push to `main`: tests, Linux (deb, rpm, tar.gz), Windows (setup + portable zip) and Android APK. Every merge to `main` publishes a release `v0.1.<build>` with all installers. Pushing a `v*` tag publishes a release with that version.
 
 Optional secrets for a release-signed APK: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`. Without them the APK uses the debug key.
 
