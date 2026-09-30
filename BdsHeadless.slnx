@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Bds.Android/Bds.Android.csproj" />
+    <Project Path="src/Bds.Core/Bds.Core.csproj" />
+    <Project Path="src/Bds.Host/Bds.Host.csproj" />
+    <Project Path="src/Bds.Tray/Bds.Tray.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Bds.Core.Tests/Bds.Core.Tests.csproj" />
+  </Folder>
+</Solution>

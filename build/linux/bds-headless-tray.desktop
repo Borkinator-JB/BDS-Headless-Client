@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BDS Headless tray
+Exec=/opt/bds-headless/bds-headless --background
+Icon=/opt/bds-headless/icon.png
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

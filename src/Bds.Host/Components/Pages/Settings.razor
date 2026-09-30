@@ -1,0 +1,85 @@
+@page "/settings"
+@inherits LiveComponent
+@inject SettingsStore Store
+@inject Autostart Autostart
+@inject IHostApplicationLifetime Lifetime
+
+<h1>Settings</h1>
+
+@if (_message is not null)
+{
+    <p class="card warn">@_message</p>
+}
+
+<section class="card">
+    <label class="check"><input type="checkbox" checked="@_startAtBoot" @onchange="SetStartAtBoot" disabled="@(!Autostart.Supported)" /> Start at boot (no login needed)</label>
+    <label class="check"><input type="checkbox" checked="@_autoAccept" @onchange="SetAutoAccept" /> Automatically accept friend requests</label>
+</section>
+
+<section class="card">
+    <h2>LAN access</h2>
+    <p class="muted">Lets other devices on your network open this page. Needs a password. Applies after restart.</p>
+    <label class="check"><input type="checkbox" checked="@_lan" @onchange="SetLan" /> Allow LAN access</label>
+    <form class="row" @onsubmit="SavePassword">
+        <input type="password" @bind="_password" placeholder="New password (min 8 chars)" minlength="8" />
+        <button type="submit">Set password</button>
+    </form>
+</section>
+
+<section class="card">
+    <h2>Stop</h2>
+    <p class="muted">Stops the service completely. Friends can't join until it's started again.</p>
+    <button class="danger" @onclick="ForceClose">Force close</button>
+</section>
+
+@code {
+    bool _startAtBoot;
+    bool _autoAccept;
+    bool _lan;
+    string _password = "";
+    string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _startAtBoot = Autostart.IsEnabled();
+        _autoAccept = await Store.GetBoolAsync(SettingKeys.AutoAcceptFriends);
+        _lan = await Store.GetBoolAsync(SettingKeys.LanAccess);
+    }
+
+    async Task SetStartAtBoot(ChangeEventArgs e)
+    {
+        var value = e.Value is true;
+        _message = await Autostart.SetAsync(value);
+        _startAtBoot = Autostart.IsEnabled();
+    }
+
+    async Task SetAutoAccept(ChangeEventArgs e)
+    {
+        _autoAccept = e.Value is true;
+        await Store.SetBoolAsync(SettingKeys.AutoAcceptFriends, _autoAccept);
+        if (_autoAccept) _ = Bridge.Friends.AutoAcceptAsync(CancellationToken.None);
+    }
+
+    async Task SetLan(ChangeEventArgs e)
+    {
+        _lan = e.Value is true;
+        await Store.SetBoolAsync(SettingKeys.LanAccess, _lan);
+        _message = _lan && await Store.GetAsync(SettingKeys.LanPasswordHash) is null
+            ? "Set a password to enable LAN access."
+            : "Restart the service to apply.";
+    }
+
+    async Task SavePassword()
+    {
+        if (_password.Length < 8)
+        {
+            _message = "Password must be at least 8 characters.";
+            return;
+        }
+        await Store.SetAsync(SettingKeys.LanPasswordHash, LanAuth.Hash(_password));
+        _password = "";
+        _message = "Password saved.";
+    }
+
+    void ForceClose() => Lifetime.StopApplication();
+}

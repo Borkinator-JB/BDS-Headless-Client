@@ -1,0 +1,100 @@
+@page "/friends"
+@inherits LiveComponent
+
+<h1>Friends</h1>
+
+@if (Bridge.Account.State != AccountState.SignedIn)
+{
+    <p class="card warn"><a href="account">Sign in</a> first.</p>
+    return;
+}
+
+@if (_error is not null)
+{
+    <p class="card error">@_error</p>
+}
+
+<section class="card">
+    <h2>Add friend</h2>
+    <form class="row" @onsubmit="Add">
+        <input @bind="_gamertag" placeholder="Gamertag" required />
+        <button type="submit" class="primary" disabled="@_busy">Add</button>
+    </form>
+</section>
+
+@if (_incoming.Count > 0)
+{
+    <section class="card">
+        <h2>Requests (@_incoming.Count)</h2>
+        <ul class="list">
+            @foreach (var p in _incoming)
+            {
+                <li>@p.Gamertag <button class="primary" @onclick="() => Accept(p)">Accept</button></li>
+            }
+        </ul>
+    </section>
+}
+
+<section class="card">
+    <h2>Friends (@_friends.Count/@Bridge.Friends.Limit) <button @onclick="Load" disabled="@_busy">Refresh</button></h2>
+    @if (_friends.Count > Bridge.Friends.Limit * 0.9)
+    {
+        <p class="warn">Close to the Xbox friend limit.</p>
+    }
+    <ul class="list">
+        @foreach (var p in _friends)
+        {
+            <li>
+                <span class="dot @(p.Online ? "on" : "")"></span>
+                @p.Gamertag
+                @if (!p.IsFollower) { <span class="muted">(hasn't added back)</span> }
+                <button class="danger" @onclick="() => Remove(p)">Remove</button>
+            </li>
+        }
+    </ul>
+</section>
+
+@code {
+    List<XboxPerson> _friends = [];
+    List<XboxPerson> _incoming = [];
+    string _gamertag = "";
+    string? _error;
+    bool _busy;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    async Task Load() => await Run(async () =>
+    {
+        if (Bridge.Account.State != AccountState.SignedIn) return;
+        _friends = (await Bridge.Friends.ListAsync(CancellationToken.None)).OrderBy(p => p.Gamertag).ToList();
+        _incoming = await Bridge.Friends.IncomingAsync(CancellationToken.None);
+    });
+
+    async Task Add() => await Run(async () =>
+    {
+        await Bridge.Friends.AddByGamertagAsync(_gamertag, CancellationToken.None);
+        _gamertag = "";
+    }, reload: true);
+
+    Task Accept(XboxPerson p) => Run(() => Bridge.Friends.AcceptAsync(p, CancellationToken.None), reload: true);
+    Task Remove(XboxPerson p) => Run(() => Bridge.Friends.RemoveAsync(p, CancellationToken.None), reload: true);
+
+    async Task Run(Func<Task> action, bool reload = false)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception e) when (e is XboxApiException or AuthException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+        if (reload && _error is null) await Load();
+    }
+}

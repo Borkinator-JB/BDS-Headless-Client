@@ -1,0 +1,28 @@
+name: bds-headless
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+section: games
+maintainer: BDS Headless Client <noreply@github.com>
+description: Lets Xbox and PlayStation friends join a Minecraft Bedrock server.
+homepage: https://github.com/Borkinator-JB/BDS-Headless-Client
+license: MIT
+contents:
+  - src: ./dist/${ARCH_DIR}/
+    dst: /opt/bds-headless/
+    type: tree
+  - src: ./build/linux/bds-headless.service
+    dst: /usr/lib/systemd/system/bds-headless.service
+  - src: ./build/linux/50-bds-headless.rules
+    dst: /usr/share/polkit-1/rules.d/50-bds-headless.rules
+  - src: ./build/linux/bds-headless.desktop
+    dst: /usr/share/applications/bds-headless.desktop
+  - src: ./build/linux/bds-headless-tray.desktop
+    dst: /etc/xdg/autostart/bds-headless-tray.desktop
+    type: config
+  - src: /opt/bds-headless/bds-headless
+    dst: /usr/bin/bds-headless
+    type: symlink
+scripts:
+  postinstall: ./build/linux/postinstall.sh
+  preremove: ./build/linux/preremove.sh

@@ -1,0 +1,108 @@
+@page "/servers"
+@inherits LiveComponent
+@inject IDbContextFactory<AppDbContext> Db
+
+<h1>Servers</h1>
+
+<section class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Address</th><th>Friends go to</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var s in _servers)
+        {
+            <tr class="@(s.IsActive ? "active" : "")">
+                <td>@s.Name</td>
+                <td>@s.Host:@s.Port</td>
+                <td>@(s.PublicHost ?? s.Host):@(s.PublicPort ?? s.Port)</td>
+                <td class="actions">
+                    @if (s.IsActive)
+                    {
+                        <button @onclick="() => Activate(null)">Disconnect</button>
+                    }
+                    else
+                    {
+                        <button class="primary" @onclick="() => Activate(s.Id)">Join</button>
+                    }
+                    <button @onclick="() => Edit(s)">Edit</button>
+                    <button class="danger" @onclick="() => Delete(s)">Delete</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>
+
+<section class="card">
+    <h2>@(_form.Id == 0 ? "Add server" : "Edit server")</h2>
+    <EditForm Model="_form" OnValidSubmit="Save" FormName="server">
+        <label>Name <InputText @bind-Value="_form.Name" required /></label>
+        <label>Host <InputText @bind-Value="_form.Host" required placeholder="play.example.com or 127.0.0.1" /></label>
+        <label>Port <InputNumber @bind-Value="_form.Port" min="1" max="65535" /></label>
+        <label>Public host <InputText @bind-Value="_form.PublicHost" placeholder="Only if Host is a LAN or localhost address" /></label>
+        <label>Public port <InputNumber @bind-Value="_form.PublicPort" min="1" max="65535" /></label>
+        <div class="row">
+            <button type="submit" class="primary">Save</button>
+            @if (_form.Id != 0)
+            {
+                <button type="button" @onclick="Reset">Cancel</button>
+            }
+        </div>
+    </EditForm>
+</section>
+
+@code {
+    List<ServerEntry> _servers = [];
+    ServerEntry _form = New();
+
+    static ServerEntry New() => new() { Name = "", Host = "" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    async Task Load()
+    {
+        await using var ctx = await Db.CreateDbContextAsync();
+        _servers = await ctx.Servers.AsNoTracking().OrderBy(s => s.Name).ToListAsync();
+    }
+
+    void Edit(ServerEntry s) => _form = new ServerEntry
+    {
+        Id = s.Id, Name = s.Name, Host = s.Host, Port = s.Port, PublicHost = s.PublicHost, PublicPort = s.PublicPort, IsActive = s.IsActive,
+    };
+
+    void Reset() => _form = New();
+
+    async Task Save()
+    {
+        _form.PublicHost = string.IsNullOrWhiteSpace(_form.PublicHost) ? null : _form.PublicHost.Trim();
+        _form.Host = _form.Host.Trim();
+        await using (var ctx = await Db.CreateDbContextAsync())
+        {
+            if (_form.Id == 0) ctx.Servers.Add(_form);
+            else ctx.Servers.Update(_form);
+            await ctx.SaveChangesAsync();
+        }
+        if (_form.IsActive) Bridge.Reload();
+        Reset();
+        await Load();
+    }
+
+    async Task Delete(ServerEntry s)
+    {
+        await using (var ctx = await Db.CreateDbContextAsync())
+        {
+            ctx.Servers.Remove(new ServerEntry { Id = s.Id, Name = s.Name, Host = s.Host });
+            await ctx.SaveChangesAsync();
+        }
+        if (s.IsActive) Bridge.Reload();
+        await Load();
+    }
+
+    async Task Activate(int? id)
+    {
+        await Bridge.SetActiveServerAsync(id, CancellationToken.None);
+        await Load();
+    }
+}

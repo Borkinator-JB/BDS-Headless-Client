@@ -1,0 +1,86 @@
+:root {
+  --bg: #f5f6f8;
+  --fg: #1d2330;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --border: #e3e6eb;
+  --accent: #2f7d32;
+  --danger: #c62828;
+  --warn: #9a6700;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --fg: #e6e8eb;
+    --muted: #9aa3ad;
+    --card: #1d2128;
+    --border: #2c323b;
+    --accent: #5cb860;
+    --danger: #ef5350;
+    --warn: #e3b341;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+a { color: var(--accent); }
+h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .5rem; display: flex; gap: .5rem; align-items: center; }
+
+.shell { display: flex; min-height: 100vh; }
+nav { width: 200px; padding: 1rem; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: .25rem; }
+nav .brand { font-weight: 700; margin-bottom: 1rem; }
+nav a { padding: .4rem .6rem; border-radius: 6px; text-decoration: none; color: var(--fg); }
+nav a.active { background: var(--bg); font-weight: 600; }
+main { flex: 1; padding: 1.5rem; max-width: 960px; }
+
+@media (max-width: 700px) {
+  .shell { flex-direction: column; }
+  nav { width: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); }
+  nav .brand { width: 100%; margin: 0; }
+  main { padding: 1rem; }
+}
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+.grid .card { margin: 0; }
+.grid { margin-bottom: 1rem; }
+.muted { color: var(--muted); }
+.warn { color: var(--warn); }
+.error { color: var(--danger); }
+.code { font: 700 2rem ui-monospace, monospace; letter-spacing: .2em; }
+
+.list { list-style: none; padding: 0; margin: 0; }
+.list li { padding: .4rem 0; border-bottom: 1px solid var(--border); display: flex; gap: .5rem; align-items: center; }
+.list li button { margin-left: auto; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.dot.on { background: var(--accent); }
+
+.badge { display: inline-block; padding: 0 .5rem; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); font-size: .85rem; }
+.badge.online, .badge.broadcasting { color: var(--accent); border-color: var(--accent); }
+.badge.offline, .badge.error { color: var(--danger); border-color: var(--danger); }
+.badge.pingonly, .badge.connecting, .badge.starting { color: var(--warn); border-color: var(--warn); }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .4rem; border-bottom: 1px solid var(--border); }
+tr.active td { font-weight: 600; }
+td.actions { display: flex; gap: .25rem; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 700px) { table, tbody, tr, td { display: block; } thead { display: none; } td.actions { justify-content: flex-start; } }
+
+label { display: block; margin-bottom: .6rem; }
+label input:not([type=checkbox]) { display: block; width: 100%; margin-top: .2rem; }
+label.check { display: flex; gap: .5rem; align-items: center; }
+input { font: inherit; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.row input { flex: 1; min-width: 180px; }
+
+button { font: inherit; padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button:disabled { opacity: .5; cursor: default; }
+
+.login { max-width: 320px; margin: 15vh auto; padding: 0 1rem; }
+
+#blazor-error-ui { display: none; position: fixed; bottom: 0; left: 0; right: 0; padding: .6rem 1rem; background: var(--warn); color: #000; }
+h1:focus { outline: none; }
