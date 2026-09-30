@@ -1,0 +1,56 @@
+@page "/"
+@inherits LiveComponent
+
+<h1>Dashboard</h1>
+
+@if (Bridge.Account.State != AccountState.SignedIn)
+{
+    <p class="card warn">Not signed in. <a href="account">Sign in</a> to start.</p>
+}
+else if (Bridge.ActiveServer is null)
+{
+    <p class="card warn">No server selected. <a href="servers">Add or pick a server</a>.</p>
+}
+else
+{
+    <section class="grid">
+        <div class="card">
+            <h2>Server</h2>
+            <p><strong>@Bridge.ActiveServer.Name</strong> <span class="muted">@Bridge.ActiveServer.Host:@Bridge.ActiveServer.Port</span></p>
+            <p><span class="badge @Bridge.Bot.State.ToString().ToLowerInvariant()">@Bridge.Bot.State</span> @Bridge.Bot.Status</p>
+            @if (Bridge.Bot.Pong is { } pong)
+            {
+                <p class="muted">@pong.Motd · @pong.Version · @pong.Players/@pong.MaxPlayers online</p>
+            }
+        </div>
+        <div class="card">
+            <h2>Friends can join</h2>
+            <p><span class="badge @Bridge.Gateway.State.ToString().ToLowerInvariant()">@Bridge.Gateway.State</span> @Bridge.Gateway.Status</p>
+            <p class="muted">Signed in as @Bridge.Account.Gamertag</p>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Players (@Bridge.Bot.Players.Count)</h2>
+        @if (Bridge.Bot.State == BotState.PingOnly)
+        {
+            <p class="muted">Names unavailable: the bot could not join. Showing count from ping.</p>
+        }
+        <ul class="list">
+            @foreach (var p in Bridge.Bot.Players)
+            {
+                <li>@p.Name</li>
+            }
+        </ul>
+    </section>
+
+    <section class="card">
+        <h2>Recent joins via Xbox</h2>
+        <ul class="list">
+            @foreach (var j in Bridge.Gateway.RecentJoins)
+            {
+                <li>@j.Name <span class="muted">@j.Time.ToLocalTime().ToString("g")</span></li>
+            }
+        </ul>
+    </section>
+}

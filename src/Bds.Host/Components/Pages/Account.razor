@@ -1,0 +1,68 @@
+@page "/account"
+@inherits LiveComponent
+
+<h1>Account</h1>
+
+<section class="card">
+    @switch (Bridge.Account.State)
+    {
+        case AccountState.SignedIn:
+            <p>Signed in as <strong>@Bridge.Account.Gamertag</strong>.</p>
+            <button class="danger" @onclick="SignOut">Sign out</button>
+            break;
+        case AccountState.WaitingForCode when Bridge.Account.PendingCode is { } pending:
+            <p>Open <a href="@pending.VerificationUri" target="_blank" rel="noopener">@pending.VerificationUri</a> and enter:</p>
+            <p class="code">@pending.UserCode</p>
+            <p class="muted">Waiting for sign in. The code expires @pending.ExpiresAt.ToLocalTime().ToString("t").</p>
+            <button @onclick="() => Bridge.Account.CancelSignIn()">Cancel</button>
+            break;
+        default:
+            @if ((_error ?? Bridge.Account.Error) is { } err)
+            {
+                <p class="error">@err</p>
+            }
+            <p>Sign in with the Microsoft account the bot should use. A separate account is recommended.</p>
+            <p class="muted">Your password is entered on microsoft.com only. This app stores an encrypted refresh token.</p>
+            <button class="primary" @onclick="SignIn" disabled="@_busy">Sign in</button>
+            break;
+    }
+</section>
+
+@code {
+    bool _busy;
+    string? _error;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Bridge.Account.Changed += Refresh;
+    }
+
+    void Refresh() => _ = InvokeAsync(StateHasChanged);
+
+    async Task SignIn()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Bridge.Account.BeginSignInAsync(CancellationToken.None);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or AuthException)
+        {
+            _error = $"Could not reach Microsoft: {e.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    Task SignOut() => Bridge.Account.SignOutAsync(CancellationToken.None);
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Bridge.Account.Changed -= Refresh;
+    }
+}

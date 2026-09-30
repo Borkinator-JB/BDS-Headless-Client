@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BDS Headless
+Comment=Let console friends join your Minecraft server
+Exec=/opt/bds-headless/bds-headless
+Icon=/opt/bds-headless/icon.png
+Categories=Game;Network;
+Terminal=false

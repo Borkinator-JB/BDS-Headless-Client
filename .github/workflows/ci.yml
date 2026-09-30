@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  VERSION: ${{ inputs.version || format('0.1.{0}', github.run_number) }}
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - run: dotnet build src/Bds.Host -c Release
+      - run: dotnet build src/Bds.Tray -c Release
+      - run: dotnet test --project tests/Bds.Core.Tests -c Release
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            nfpm: amd64
+          - arch: arm64
+            nfpm: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Publish
+        run: |
+          out=dist/linux-${{ matrix.arch }}
+          for p in Bds.Host Bds.Tray; do
+            dotnet publish src/$p -c Release -r linux-${{ matrix.arch }} --self-contained -p:Version=$VERSION -o $out
+          done
+          cp build/linux/autostart-check.sh assets/icon.png $out/
+          chmod +x $out/autostart-check.sh $out/bds-headless $out/bds-headless-service
+      - name: Install nfpm
+        run: |
+          curl -sSfL -o nfpm.tar.gz https://github.com/goreleaser/nfpm/releases/download/v2.43.0/nfpm_2.43.0_Linux_x86_64.tar.gz
+          tar -xzf nfpm.tar.gz nfpm
+      - name: Package
+        env:
+          NFPM_ARCH: ${{ matrix.nfpm }}
+        run: |
+          mkdir -p artifacts
+          cp -r dist/linux-${{ matrix.arch }} dist/package
+          ./nfpm package -f build/linux/nfpm.yaml -p deb -t artifacts/
+          ./nfpm package -f build/linux/nfpm.yaml -p rpm -t artifacts/
+          tgz=bds-headless-$VERSION-linux-${{ matrix.arch }}
+          mkdir -p $tgz/app
+          cp -r dist/linux-${{ matrix.arch }}/. $tgz/app/
+          cp build/linux/{install.sh,postinstall.sh,bds-headless.service,50-bds-headless.rules,bds-headless.desktop,bds-headless-tray.desktop} $tgz/
+          tar -czf artifacts/$tgz.tar.gz $tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: artifacts/*
+
+  windows:
+    name: Windows x64
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Publish
+        shell: pwsh
+        run: |
+          foreach ($p in 'Bds.Host', 'Bds.Tray') {
+            dotnet publish "src/$p" -c Release -r win-x64 --self-contained "-p:Version=$env:VERSION" -o dist/win-x64
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Compress-Archive -Path dist/win-x64/* -DestinationPath "artifacts/bds-headless-$env:VERSION-win-x64-portable.zip"
+      - name: Build setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc "/DAppVersion=$env:VERSION" build/windows/setup.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: artifacts/*
+
+  android:
+    name: Android
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet workload install android
+      - name: Keystore
+        id: keystore
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "args=-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=$RUNNER_TEMP/release.keystore -p:AndroidSigningKeyAlias=${{ secrets.ANDROID_KEY_ALIAS }} -p:AndroidSigningKeyPass=env:ANDROID_KEYSTORE_PASSWORD -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release keystore, using the debug key."
+          fi
+      - name: Publish
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          dotnet publish src/Bds.Android -c Release -f net10.0-android \
+            -p:ApplicationDisplayVersion=$VERSION -p:ApplicationVersion=${{ github.run_number }} \
+            -p:AcceptAndroidSDKLicenses=true ${{ steps.keystore.outputs.args }} -o out
+          mkdir -p artifacts
+          cp "$(ls out/*-Signed.apk | head -n1)" artifacts/bds-headless-$VERSION-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: artifacts/*
