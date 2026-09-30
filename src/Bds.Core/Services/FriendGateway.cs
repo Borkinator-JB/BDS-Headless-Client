@@ -29,6 +29,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
 
     readonly ILogger _log = logs.CreateLogger<FriendGateway>();
     readonly SessionDirectoryClient _sessions = new(xbox);
+    readonly PresenceClient _presence = new(xbox);
     readonly ConcurrentDictionary<ulong, NetherNetConnection> _connections = new();
     readonly ConcurrentQueue<JoinedFriend> _recent = new();
 
@@ -102,6 +103,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         {
             await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId), ct);
             await _sessions.SetActivityAsync(sessionId, ct);
+            await SetPresenceAsync(xuid, ct);
             backoff.Reset();
             Set(GatewayState.Broadcasting, null);
             _log.LogInformation("Broadcasting session {Session}", sessionId);
@@ -112,6 +114,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             {
                 if (bot.Pong is null || bot.Target != lastTarget) return;
                 await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId), linked.Token);
+                await SetPresenceAsync(xuid, linked.Token);
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -123,6 +126,18 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             foreach (var c in _connections.Values) await c.DisposeAsync();
             _connections.Clear();
             await _sessions.LeaveAsync(sessionId, CancellationToken.None);
+        }
+    }
+
+    async Task SetPresenceAsync(string xuid, CancellationToken ct)
+    {
+        try
+        {
+            await _presence.SetActiveAsync(xuid, ct);
+        }
+        catch (XboxApiException e)
+        {
+            _log.LogWarning("Presence update failed: {Message}", e.Message);
         }
     }
 
