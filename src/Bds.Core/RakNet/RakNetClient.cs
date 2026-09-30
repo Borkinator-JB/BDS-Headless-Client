@@ -9,7 +9,7 @@ using Bds.Core.Protocol;
 namespace Bds.Core.RakNet;
 
 /// <summary>Minimal RakNet client: enough to talk to Bedrock servers.</summary>
-public sealed class RakNetClient : IAsyncDisposable
+public sealed class RakNetClient : IGameTransport
 {
     static readonly int[] MtuSizes = [1492, 1200, 576];
     static readonly TimeSpan ResendAfter = TimeSpan.FromMilliseconds(800);
@@ -42,6 +42,7 @@ public sealed class RakNetClient : IAsyncDisposable
     public string? DisconnectReason { get; private set; }
     public ChannelReader<byte[]> Incoming => _incoming.Reader;
     public IPEndPoint Remote => _remote;
+    public bool Encrypted => true;
 
     RakNetClient(IPEndPoint remote)
     {

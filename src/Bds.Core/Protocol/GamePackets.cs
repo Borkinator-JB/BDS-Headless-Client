@@ -13,6 +13,9 @@ public static class GamePackets
     public const int ProtocolPlayerColor = 766;
     public const int ProtocolTransferReload = 729;
     public const int ProtocolDisconnectFiltered = 712;
+    // 1.26 renumbered protocols (1.26.52 is 2193) and changed the resource pack response and skin layouts.
+    // Only 2193 was checked against a real server; the exact first version with each change is unknown.
+    public const int Protocol126 = 1000;
 
     public static byte[] RequestNetworkSettings(int protocol) =>
         Packet.Encode(PacketId.RequestNetworkSettings, w => w.Int32BE(protocol));
@@ -60,11 +63,21 @@ public static class GamePackets
 
     public static PlayStatus ReadPlayStatus(Packet p) => (PlayStatus)p.Reader().Int32BE();
 
-    public static byte[] ResourcePackResponse(byte status) =>
-        Packet.Encode(PacketId.ResourcePackClientResponse, w => w.Byte(status).UInt16LE(0));
+    public static byte[] ResourcePackResponse(bool completed, int protocol) =>
+        Packet.Encode(PacketId.ResourcePackClientResponse, w =>
+        {
+            if (protocol < Protocol126)
+            {
+                w.Byte(completed ? (byte)4 : (byte)3).UInt16LE(0);
+                return;
+            }
+            // Renumbered (have all = 2, completed = 3) and followed by the status name.
+            var status = completed ? 3u : 2u;
+            w.VarUInt(status).String(completed ? "resourcepackstackfinished" : "downloadingfinished");
+        });
 
-    public const byte ResourcePackHaveAll = 3;
-    public const byte ResourcePackCompleted = 4;
+    public static byte[] ClientCacheStatus(bool enabled) =>
+        Packet.Encode(PacketId.ClientCacheStatus, w => w.Bool(enabled));
 
     public static (long UniqueId, ulong RuntimeId) ReadStartGame(Packet p)
     {
@@ -119,8 +132,11 @@ public static class GamePackets
     public static PlayerListUpdate ReadPlayerList(Packet p, int protocol)
     {
         var r = p.Reader();
-        var add = r.Byte() == 0;
+        r.Byte();
         var count = checked((int)r.VarUInt());
+        // The action values changed across versions (0 = add before, 1 = add at 2193), so go by shape:
+        // a remove entry is just a UUID, an add entry is always longer.
+        var add = r.Remaining != count * 16;
         var entries = new List<PlayerListEntry>(count);
         for (var i = 0; i < count; i++)
         {
@@ -135,10 +151,19 @@ public static class GamePackets
             var xuid = r.String();
             r.String();
             r.Int32LE();
-            SkipSkin(r);
-            r.Bool();
-            r.Bool();
-            r.Bool();
+            if (protocol >= Protocol126)
+            {
+                SkipSkin126(r);
+                r.String();
+                r.Bytes(4);
+            }
+            else
+            {
+                SkipSkin(r);
+                r.Bool();
+                r.Bool();
+                r.Bool();
+            }
             if (protocol >= ProtocolPlayerColor) r.Int32LE();
             entries.Add(new PlayerListEntry(uuid, name, xuid));
         }
@@ -172,6 +197,43 @@ public static class GamePackets
             r.String();
             var colors = r.UInt32LE();
             for (var c = 0; c < colors; c++) r.String();
+        }
+        for (var i = 0; i < 5; i++) r.Bool();
+    }
+
+    /// <summary>
+    /// 1.26 layout: counts are varuints, arm size is a byte and skin color a u32.
+    /// Animation, persona piece and tint entries are assumed unchanged apart from their counts.
+    /// </summary>
+    static void SkipSkin126(PacketReader r)
+    {
+        r.String();
+        r.String();
+        r.String();
+        SkipImage(r);
+        var animations = r.VarUInt();
+        for (var i = 0ul; i < animations; i++)
+        {
+            SkipImage(r);
+            r.UInt32LE();
+            r.FloatLE();
+            r.UInt32LE();
+        }
+        SkipImage(r);
+        for (var i = 0; i < 5; i++) r.String();
+        r.Byte();
+        r.UInt32LE();
+        var pieces = r.VarUInt();
+        for (var i = 0ul; i < pieces; i++)
+        {
+            r.String(); r.String(); r.String(); r.Bool(); r.String();
+        }
+        var tints = r.VarUInt();
+        for (var i = 0ul; i < tints; i++)
+        {
+            r.String();
+            var colors = r.VarUInt();
+            for (var c = 0ul; c < colors; c++) r.String();
         }
         for (var i = 0; i < 5; i++) r.Bool();
     }

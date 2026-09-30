@@ -120,8 +120,11 @@ public sealed class MinecraftServicesClient(HttpClient http)
         return text.Length > 300 ? text[..300] : text;
     }
 
-    /// <summary>Newer login token (1.21.90+). Optional: servers still accept the legacy chain.</summary>
-    public async Task<string?> GetMultiplayerTokenAsync(McToken mcToken, ECDsa identityKey, CancellationToken ct)
+    /// <summary>
+    /// Newer login token (1.21.90+), bound to <paramref name="identityKey"/>. RakNet servers still accept
+    /// the legacy chain without it; NetherNet servers need it for the WebRTC identity.
+    /// </summary>
+    public async Task<string> GetMultiplayerTokenAsync(McToken mcToken, ECDsa identityKey, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, MultiplayerStartUrl)
         {
@@ -129,8 +132,8 @@ public sealed class MinecraftServicesClient(HttpClient http)
         };
         req.Headers.TryAddWithoutValidation("Authorization", mcToken.AuthorizationHeader);
         using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode) return null;
+        if (!res.IsSuccessStatusCode) throw new AuthException($"Multiplayer token failed ({(int)res.StatusCode}): {await ErrorTextAsync(res, ct)}");
         var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
-        return json?["result"]?["signedToken"]?.GetValue<string>();
+        return json?["result"]?["signedToken"]?.GetValue<string>() ?? throw new AuthException("No multiplayer token");
     }
 }

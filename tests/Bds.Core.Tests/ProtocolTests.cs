@@ -123,6 +123,66 @@ public class ProtocolTests
         Assert.Equal("123", entry.Xuid);
     }
 
+    [Fact]
+    public void PlayerList_Reads_126_Layout()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        // Layout captured from a 1.26.52 (protocol 2193) server.
+        void Entry(PacketWriter w, Guid uuid, string name)
+        {
+            w.Uuid(uuid).VarLong(5).String(name).String("2535400000000000").String("").Int32LE(1);
+            w.String("Standard_Custom").String("D660D7EAE7CC1F7B").String("{\"geometry\":{}}");
+            WriteImage(w, 64, 64);
+            w.VarUInt(0);
+            WriteImage(w, 0, 0);
+            w.String("null\n").String("0.0.0").String("").String("CAPEID").String("Standard_CustomCAPEID");
+            w.Byte(0).Int32LE(0x00abcdef);
+            w.VarUInt(0).VarUInt(0);
+            for (var i = 0; i < 5; i++) w.Bool(false);
+            w.String("false").Bytes([0, 0, 0, 0]).Int32LE(unchecked((int)0xffededed));
+        }
+        var body = Packet.Encode(PacketId.PlayerList, w =>
+        {
+            w.Byte(1).VarUInt(2);
+            Entry(w, a, "Alex");
+            Entry(w, b, "Steve");
+        });
+
+        var list = GamePackets.ReadPlayerList(Packet.Decode(body), 2193);
+
+        Assert.True(list.Add);
+        Assert.Equal(["Alex", "Steve"], list.Entries.Select(e => e.Name));
+        Assert.Equal(b, list.Entries[1].Uuid);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void PlayerList_Detects_Remove(byte action)
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var body = Packet.Encode(PacketId.PlayerList, w => w.Byte(action).VarUInt(2).Uuid(a).Uuid(b));
+
+        var list = GamePackets.ReadPlayerList(Packet.Decode(body), 2193);
+
+        Assert.False(list.Add);
+        Assert.Equal([a, b], list.Entries.Select(e => e.Uuid));
+    }
+
+    [Fact]
+    public void ResourcePackResponse_Uses_Named_Layout_On_New_Protocols()
+    {
+        var r = Packet.Decode(GamePackets.ResourcePackResponse(true, 2193)).Reader();
+        Assert.Equal(3ul, r.VarUInt());
+        Assert.Equal("resourcepackstackfinished", r.String());
+
+        var old = Packet.Decode(GamePackets.ResourcePackResponse(true, 800)).Reader();
+        Assert.Equal(4, old.Byte());
+        Assert.Equal(0, old.UInt16LE());
+    }
+
     static void WriteImage(PacketWriter w, int width, int height) =>
         w.Int32LE(width).Int32LE(height).ByteArray(new byte[width * height * 4]);
 }

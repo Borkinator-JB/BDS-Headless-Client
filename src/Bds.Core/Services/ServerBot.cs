@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Bds.Core.Auth;
+using Bds.Core.NetherNet;
 using Bds.Core.Protocol;
 using Bds.Core.RakNet;
 using Bds.Core.Util;
@@ -25,6 +26,7 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
     static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(30);
 
     readonly ConcurrentDictionary<Guid, PlayerListEntry> _players = new();
+    bool _netherNet;
 
     public BotState State { get; private set; } = BotState.Idle;
     public string? Status { get; private set; }
@@ -46,7 +48,7 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                 try
                 {
                     Set(BotState.Connecting, "Pinging server");
-                    Pong = await RakNetClient.PingAsync(target.Host, target.Port, TimeSpan.FromSeconds(5), ct);
+                    Pong = await PingAsync(target, ct);
                     Set(BotState.Connecting, "Joining server");
                     await SessionAsync(target, Pong, backoff, ct);
                 }
@@ -87,16 +89,43 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
         {
             try
             {
-                Pong = await RakNetClient.PingAsync(target.Host, target.Port, TimeSpan.FromSeconds(5), ct);
+                Pong = await PingAsync(target, ct);
                 Set(BotState.PingOnly, $"Ping only: {reason}");
             }
-            catch (TimeoutException)
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 Set(BotState.Offline, "Server not responding");
             }
             await Task.Delay(PingInterval, ct);
         }
     }
+
+    /// <summary>Tries the transport that worked last, then the other one (servers with transport=nethernet don't answer RakNet).</summary>
+    async Task<ServerPong> PingAsync(ServerTarget target, CancellationToken ct)
+    {
+        try
+        {
+            return await PingAsync(target, _netherNet, ct);
+        }
+        catch (Exception first) when (first is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            try
+            {
+                var pong = await PingAsync(target, !_netherNet, ct);
+                _netherNet = !_netherNet;
+                log.LogInformation("Server uses {Transport}", _netherNet ? "NetherNet" : "RakNet");
+                return pong;
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                throw first;
+            }
+        }
+    }
+
+    static Task<ServerPong> PingAsync(ServerTarget target, bool netherNet, CancellationToken ct) => netherNet
+        ? NetherNetClient.PingAsync(target.Host, target.Port, TimeSpan.FromSeconds(5), ct)
+        : RakNetClient.PingAsync(target.Host, target.Port, TimeSpan.FromSeconds(5), ct);
 
     async Task SessionAsync(ServerTarget target, ServerPong pong, Backoff backoff, CancellationToken ct)
     {
@@ -106,28 +135,41 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
 
         var xsts = await account.GetXstsAsync(AuthConstants.MinecraftRelyingParty, ct);
         var chain = await account.Minecraft.GetChainAsync(xsts, identity, ct);
+        var netherNet = _netherNet;
         string? token = null;
-        if (protocol >= LoginBuilder.ProtocolTokenLogin)
+        if (netherNet || protocol >= LoginBuilder.ProtocolTokenLogin)
         {
             try
             {
                 var mc = await account.GetMcTokenAsync(pong.Version, ct);
                 token = await account.Minecraft.GetMultiplayerTokenAsync(mc, identity, ct);
             }
-            catch (Exception e) when (e is AuthException or HttpRequestException)
+            catch (Exception e) when (!netherNet && e is AuthException or HttpRequestException)
             {
                 log.LogDebug("Multiplayer token unavailable: {Message}", e.Message);
             }
         }
 
-        await using var rak = await RakNetClient.ConnectAsync(target.Host, target.Port, ct);
+        string serverAddress;
+        IGameTransport transport;
+        if (netherNet)
+        {
+            serverAddress = NetherNetClient.ServerAddress(await RakNetClient.ResolveAsync(target.Host, target.Port, ct));
+            transport = await NetherNetClient.ConnectAsync(target.Host, target.Port, identity, token!, log, ct);
+        }
+        else
+        {
+            serverAddress = $"{target.Host}:{target.Port}";
+            transport = await RakNetClient.ConnectAsync(target.Host, target.Port, ct);
+        }
+        await using var _ = transport;
         using var codec = new BatchCodec();
-        void Send(params byte[][] packets) => rak.Send(codec.Encode(packets));
+        void Send(params byte[][] packets) => transport.Send(codec.Encode(packets));
 
         Send(GamePackets.RequestNetworkSettings(protocol));
         ulong runtimeId = 0;
 
-        await foreach (var batch in rak.Incoming.ReadAllAsync(ct))
+        await foreach (var batch in transport.Incoming.ReadAllAsync(ct))
         {
             foreach (var packet in codec.Decode(batch))
             {
@@ -140,9 +182,13 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                         codec.EnableCompression(settings.Algorithm, settings.Threshold);
                         Send(GamePackets.Login(protocol,
                             LoginBuilder.Identity(chain, identity, token, protocol),
-                            LoginBuilder.ClientData(identity, account.Gamertag ?? "", pong.Version, $"{target.Host}:{target.Port}", account.DeviceId)));
+                            LoginBuilder.ClientData(identity, account.Gamertag ?? "", pong.Version, serverAddress, account.DeviceId)));
                         break;
                     }
+                    case PacketId.ServerToClientHandshake when !transport.Encrypted:
+                        // NetherNet is already DTLS encrypted; just acknowledge.
+                        Send(GamePackets.ClientToServerHandshake());
+                        break;
                     case PacketId.ServerToClientHandshake:
                     {
                         var jwt = GamePackets.ReadServerToClientHandshake(packet);
@@ -159,7 +205,11 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                     {
                         var status = GamePackets.ReadPlayStatus(packet);
                         log.LogInformation("Play status {Status}", status);
-                        if (status == PlayStatus.PlayerSpawn)
+                        if (status == PlayStatus.LoginSuccess)
+                        {
+                            Send(GamePackets.ClientCacheStatus(false));
+                        }
+                        else if (status == PlayStatus.PlayerSpawn)
                         {
                             Send(GamePackets.SetLocalPlayerAsInitialized(runtimeId));
                             backoff.Reset();
@@ -174,10 +224,10 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                         break;
                     }
                     case PacketId.ResourcePacksInfo:
-                        Send(GamePackets.ResourcePackResponse(GamePackets.ResourcePackHaveAll));
+                        Send(GamePackets.ResourcePackResponse(false, protocol));
                         break;
                     case PacketId.ResourcePackStack:
-                        Send(GamePackets.ResourcePackResponse(GamePackets.ResourcePackCompleted));
+                        Send(GamePackets.ResourcePackResponse(true, protocol));
                         break;
                     case PacketId.StartGame:
                         log.LogInformation("Start game received");
@@ -200,10 +250,13 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                             throw new JoinRejectedException(reason);
                         throw new IOException($"Kicked: {reason}");
                     }
+                    default:
+                        log.LogTrace("Ignoring packet {Id}", packet.Id);
+                        break;
                 }
             }
         }
-        throw new IOException(rak.DisconnectReason ?? "Connection closed");
+        throw new IOException(transport.DisconnectReason ?? "Connection closed");
     }
 
     void ApplyPlayerList(Packet packet, int protocol)

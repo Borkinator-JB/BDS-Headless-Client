@@ -16,6 +16,7 @@ public static class PacketId
     public const int Transfer = 85;
     public const int SetLocalPlayerAsInitialized = 113;
     public const int NetworkStackLatency = 115;
+    public const int ClientCacheStatus = 129;
     public const int NetworkSettings = 143;
     public const int RequestNetworkSettings = 193;
 }
