@@ -27,13 +27,15 @@ public static class AppLog
 
 public sealed class AppLogProvider : ILoggerProvider
 {
-    public ILogger CreateLogger(string categoryName) => new AppLogger(categoryName[(categoryName.LastIndexOf('.') + 1)..]);
+    public ILogger CreateLogger(string categoryName) => new AppLogger(
+        categoryName[(categoryName.LastIndexOf('.') + 1)..],
+        categoryName.StartsWith("Microsoft.", StringComparison.Ordinal) ? LogLevel.Warning : LogLevel.Information);
     public void Dispose() { }
 
-    sealed class AppLogger(string category) : ILogger
+    sealed class AppLogger(string category, LogLevel minLevel) : ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= minLevel;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {

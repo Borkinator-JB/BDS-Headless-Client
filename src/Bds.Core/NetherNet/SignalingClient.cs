@@ -102,7 +102,11 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
                 do
                 {
                     res = await _ws.ReceiveAsync(buf, ct);
-                    if (res.MessageType == WebSocketMessageType.Close) return;
+                    if (res.MessageType == WebSocketMessageType.Close)
+                    {
+                        reason = $"Signaling closed ({res.CloseStatus} {res.CloseStatusDescription})";
+                        return;
+                    }
                     ms.Write(buf, 0, res.Count);
                 } while (!res.EndOfMessage);
                 Handle(JsonNode.Parse(ms.ToArray()));

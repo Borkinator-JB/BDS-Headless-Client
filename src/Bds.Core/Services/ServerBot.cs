@@ -136,6 +136,7 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                     case PacketId.NetworkSettings:
                     {
                         var settings = GamePackets.ReadNetworkSettings(packet);
+                        log.LogInformation("Connected, logging in (protocol {Protocol}, compression {Algorithm})", protocol, settings.Algorithm);
                         codec.EnableCompression(settings.Algorithm, settings.Threshold);
                         Send(GamePackets.Login(protocol,
                             LoginBuilder.Identity(chain, identity, token, protocol),
@@ -157,6 +158,7 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                     case PacketId.PlayStatus:
                     {
                         var status = GamePackets.ReadPlayStatus(packet);
+                        log.LogInformation("Play status {Status}", status);
                         if (status == PlayStatus.PlayerSpawn)
                         {
                             Send(GamePackets.SetLocalPlayerAsInitialized(runtimeId));
@@ -178,6 +180,7 @@ public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)
                         Send(GamePackets.ResourcePackResponse(GamePackets.ResourcePackCompleted));
                         break;
                     case PacketId.StartGame:
+                        log.LogInformation("Start game received");
                         runtimeId = GamePackets.ReadStartGame(packet).RuntimeId;
                         Send(GamePackets.RequestChunkRadius(4));
                         break;
