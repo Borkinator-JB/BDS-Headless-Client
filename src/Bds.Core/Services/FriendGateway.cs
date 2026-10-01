@@ -32,6 +32,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
     readonly ConcurrentDictionary<string, string> _nonces = new();
     readonly SemaphoreSlim _nonceLock = new(1, 1);
     readonly PresenceClient _presence = new(xbox);
+    readonly ServerIdentity _identity = new();
     readonly ConcurrentDictionary<ulong, NetherNetConnection> _connections = new();
     readonly ConcurrentQueue<JoinedFriend> _recent = new();
 
@@ -240,7 +241,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                         new Signal(signal.From, Signal.CandidateAdd, signal.ConnectionId, c), ct)
                         .ContinueWith(t => _log.LogDebug("Candidate not sent: {Message}", t.Exception?.GetBaseException().Message),
                             TaskContinuationOptions.OnlyOnFaulted);
-                    var answer = await conn.AnswerAsync(signal.Data);
+                    var answer = _identity.Sign(await conn.AnswerAsync(signal.Data));
                     await signaling.SendSignalAsync(signal.From, new Signal(signal.From, Signal.ConnectResponse, signal.ConnectionId, answer), ct);
                     _ = RedirectAsync(conn, ct);
                     break;
@@ -255,7 +256,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _log.LogDebug("Signal handling failed: {Message}", e.Message);
+            _log.LogWarning("Signal handling failed: {Message}", e.Message);
         }
     }
 
@@ -308,7 +309,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         }
         catch (Exception e) when (e is OperationCanceledException or IOException or InvalidDataException or EndOfStreamException or InvalidOperationException)
         {
-            _log.LogDebug("Friend connection ended: {Message}", e.Message);
+            _log.LogInformation("Friend connection ended: {Message}", e.Message);
         }
         finally
         {

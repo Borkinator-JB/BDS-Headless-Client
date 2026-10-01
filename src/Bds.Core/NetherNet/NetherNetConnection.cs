@@ -44,6 +44,7 @@ public sealed class NetherNetConnection : IAsyncDisposable
         };
         _pc.onconnectionstatechange += state =>
         {
+            _log.LogInformation("Friend connection {Id}: {State}", connectionId, state);
             if (state is RTCPeerConnectionState.failed or RTCPeerConnectionState.closed or RTCPeerConnectionState.disconnected)
                 Close();
         };
