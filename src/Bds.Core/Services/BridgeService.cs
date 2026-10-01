@@ -11,6 +11,7 @@ public sealed class BridgeService(
     ServerBot bot,
     FriendGateway gateway,
     FriendManager friends,
+    FriendRoutes routes,
     IDbContextFactory<AppDbContext> db,
     SettingsStore settings,
     ILogger<BridgeService> log)
@@ -26,6 +27,7 @@ public sealed class BridgeService(
     public ServerBot Bot => bot;
     public FriendGateway Gateway => gateway;
     public FriendManager Friends => friends;
+    public FriendRoutes Routes => routes;
     public ServerEntry? ActiveServer { get; private set; }
     public bool IsRunning { get; private set; }
 
@@ -40,6 +42,7 @@ public sealed class BridgeService(
             if (_initialized) return;
             await using (var ctx = await db.CreateDbContextAsync(ct))
                 await ctx.Database.MigrateAsync(ct);
+            await routes.ReloadAsync(ct);
             await account.TryResumeAsync(ct);
             _initialized = true;
         }
@@ -53,7 +56,7 @@ public sealed class BridgeService(
     {
         await InitializeAsync(ct);
         void OnSocial() => _ = SafeAutoAcceptAsync(ct);
-        void OnJoined(JoinedFriend f) => _ = settings.LogAsync("join", $"{f.Name} joined", CancellationToken.None);
+        void OnJoined(JoinedFriend f) => _ = settings.LogAsync("join", $"{f.Name} joined {f.Server}", CancellationToken.None);
         account.Changed += Reload;
         bot.Changed += OnChanged;
         gateway.Changed += OnChanged;
@@ -74,9 +77,7 @@ public sealed class BridgeService(
                 }
 
                 _current = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var target = new ServerTarget(ActiveServer.Host, ActiveServer.Port,
-                    string.IsNullOrWhiteSpace(ActiveServer.PublicHost) ? ActiveServer.Host : ActiveServer.PublicHost,
-                    ActiveServer.PublicPort ?? ActiveServer.Port);
+                var target = ServerTarget.From(ActiveServer);
                 log.LogInformation("Starting bridge for {Name}", ActiveServer.Name);
                 await Task.WhenAll(
                     bot.RunAsync(target, _current.Token),

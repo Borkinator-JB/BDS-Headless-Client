@@ -15,6 +15,14 @@ public sealed class ServerEntry
     public bool IsActive { get; set; }
 }
 
+/// <summary>Sends one friend to this server instead of the active one.</summary>
+public sealed class FriendRoute
+{
+    public required string Xuid { get; set; }
+    public int ServerId { get; set; }
+    public ServerEntry? Server { get; set; }
+}
+
 public sealed class SettingEntry
 {
     public required string Key { get; set; }
@@ -34,6 +42,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ServerEntry> Servers => Set<ServerEntry>();
     public DbSet<SettingEntry> Settings => Set<SettingEntry>();
     public DbSet<ActivityEntry> Activity => Set<ActivityEntry>();
+    public DbSet<FriendRoute> FriendRoutes => Set<FriendRoute>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -42,6 +51,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Name).HasMaxLength(100);
             e.Property(x => x.Host).HasMaxLength(255);
             e.Property(x => x.PublicHost).HasMaxLength(255);
+        });
+        b.Entity<FriendRoute>(e =>
+        {
+            e.HasKey(x => x.Xuid);
+            e.Property(x => x.Xuid).HasMaxLength(20);
+            e.HasOne(x => x.Server).WithMany().HasForeignKey(x => x.ServerId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<SettingEntry>().HasKey(x => x.Key);
         b.Entity<ActivityEntry>(e =>

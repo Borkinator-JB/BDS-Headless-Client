@@ -49,7 +49,7 @@ else
         <ul class="list">
             @foreach (var j in Bridge.Gateway.RecentJoins)
             {
-                <li>@j.Name <span class="muted">@j.Time.ToLocalTime().ToString("g")</span></li>
+                <li>@j.Name → @j.Server <span class="muted">@j.Time.ToLocalTime().ToString("g")</span></li>
             }
         </ul>
     </section>

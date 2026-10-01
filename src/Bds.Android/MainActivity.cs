@@ -94,7 +94,7 @@ public sealed class MainActivity : BaseActivity
         _players.Clear();
         _players.AddAll(players);
         _joins.Clear();
-        _joins.AddAll(Bridge.Gateway.RecentJoins.Select(j => $"{j.Name}  {j.Time.ToLocalTime():t}").ToList());
+        _joins.AddAll(Bridge.Gateway.RecentJoins.Select(j => $"{j.Name} → {j.Server}  {j.Time.ToLocalTime():t}").ToList());
     }
 
     void Toggle()

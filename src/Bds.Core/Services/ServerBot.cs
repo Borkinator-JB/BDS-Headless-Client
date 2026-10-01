@@ -4,6 +4,7 @@ using Bds.Core.Auth;
 using Bds.Core.NetherNet;
 using Bds.Core.Protocol;
 using Bds.Core.RakNet;
+using Bds.Core.Storage;
 using Bds.Core.Util;
 using Microsoft.Extensions.Logging;
 
@@ -18,7 +19,12 @@ public enum BotState
     Offline,
 }
 
-public sealed record ServerTarget(string Host, int Port, string TransferHost, int TransferPort);
+public sealed record ServerTarget(string Name, string Host, int Port, string TransferHost, int TransferPort)
+{
+    public static ServerTarget From(ServerEntry s) => new(s.Name, s.Host, s.Port,
+        string.IsNullOrWhiteSpace(s.PublicHost) ? s.Host : s.PublicHost,
+        s.PublicPort ?? s.Port);
+}
 
 /// <summary>Joins the selected server as the signed in account and tracks who is online.</summary>
 public sealed class ServerBot(XboxAccount account, ILogger<ServerBot> log)

@@ -23,6 +23,6 @@
   <string name="auto_accept">Automatically accept friend requests</string>
   <string name="requests">Requests (tap to accept)</string>
   <string name="servers_hint">Tap to join. Long press to delete.</string>
-  <string name="friends_hint">Long press to remove.</string>
+  <string name="friends_hint">Tap to pick their server. Long press to remove.</string>
   <string name="channel_name">Gateway</string>
 </resources>

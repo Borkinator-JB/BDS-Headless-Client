@@ -21,6 +21,7 @@ public static class CoreServices
         services.AddSingleton<ServerBot>();
         services.AddSingleton<FriendGateway>();
         services.AddSingleton<FriendManager>();
+        services.AddSingleton<FriendRoutes>();
         services.AddSingleton<BridgeService>();
         return services;
     }

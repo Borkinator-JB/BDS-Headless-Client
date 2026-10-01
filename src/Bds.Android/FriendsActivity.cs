@@ -7,6 +7,7 @@ using Bds.Core.Auth;
 using Bds.Core.Storage;
 using Bds.Core.Xbox;
 using Google.Android.Material.MaterialSwitch;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bds.Android;
@@ -18,9 +19,11 @@ public sealed class FriendsActivity : BaseActivity
     ArrayAdapter<string> _requestsAdapter = null!;
     List<XboxPerson> _friends = [];
     List<XboxPerson> _requests = [];
+    List<ServerEntry> _servers = [];
     TextView _error = null!;
 
     static SettingsStore Settings => BdsApp.Services.GetRequiredService<SettingsStore>();
+    static IDbContextFactory<AppDbContext> Db => BdsApp.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
 
     protected override async void OnCreate(Bundle? savedInstanceState)
     {
@@ -33,6 +36,7 @@ public sealed class FriendsActivity : BaseActivity
 
         var list = FindViewById<ListView>(Resource.Id.list)!;
         list.Adapter = _friendsAdapter;
+        list.ItemClick += (_, e) => PickServer(_friends[e.Position]);
         list.ItemLongClick += (_, e) => ConfirmRemove(_friends[e.Position]);
 
         var requests = FindViewById<ListView>(Resource.Id.requests)!;
@@ -73,6 +77,8 @@ public sealed class FriendsActivity : BaseActivity
         {
             _friends = (await BdsApp.Bridge.Friends.ListAsync(CancellationToken.None)).OrderBy(p => p.Gamertag).ToList();
             _requests = await BdsApp.Bridge.Friends.IncomingAsync(CancellationToken.None);
+            await using var ctx = await Db.CreateDbContextAsync();
+            _servers = await ctx.Servers.AsNoTracking().OrderBy(s => s.Name).ToListAsync();
         }
         catch (Exception e)
         {
@@ -81,11 +87,31 @@ public sealed class FriendsActivity : BaseActivity
             return;
         }
         _friendsAdapter.Clear();
-        _friendsAdapter.AddAll(_friends.Select(p => $"{(p.Online ? "● " : "")}{p.Gamertag}").ToList());
+        _friendsAdapter.AddAll(_friends.Select(p => $"{(p.Online ? "● " : "")}{p.Gamertag}{ServerLabel(p)}").ToList());
         _requestsAdapter.Clear();
         _requestsAdapter.AddAll(_requests.Select(p => p.Gamertag).ToList());
         FindViewById<TextView>(Resource.Id.friends_title)!.Text =
             $"{GetString(Resource.String.friends)} ({_friends.Count}/{BdsApp.Bridge.Friends.Limit})";
+    }
+
+    string ServerLabel(XboxPerson p) =>
+        _servers.FirstOrDefault(s => s.Id == BdsApp.Bridge.Routes.ServerIdFor(p.Xuid)) is { } s ? $" → {s.Name}" : "";
+
+    void PickServer(XboxPerson p)
+    {
+        var current = BdsApp.Bridge.Routes.ServerIdFor(p.Xuid);
+        var names = _servers.Select(s => s.Name).Prepend("Default").ToArray();
+        var selected = _servers.FindIndex(s => s.Id == current) + 1;
+        new AndroidX.AppCompat.App.AlertDialog.Builder(this)
+            .SetTitle($"Server for {p.Gamertag}")!
+            .SetSingleChoiceItems(names, selected, async (sender, e) =>
+            {
+                ((AndroidX.AppCompat.App.AlertDialog)sender!).Dismiss();
+                int? id = e.Which == 0 ? null : _servers[e.Which - 1].Id;
+                await Run(() => BdsApp.Bridge.Routes.SetAsync(p.Xuid, id, CancellationToken.None));
+            })!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show();
     }
 
     void ConfirmRemove(XboxPerson p) =>

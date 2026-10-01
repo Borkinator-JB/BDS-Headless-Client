@@ -16,13 +16,13 @@ public enum GatewayState
     Error,
 }
 
-public sealed record JoinedFriend(string Name, string? Xuid, DateTimeOffset Time);
+public sealed record JoinedFriend(string Name, string? Xuid, string Server, DateTimeOffset Time);
 
 /// <summary>
 /// Publishes a joinable Xbox session for the bot's server. Friends connect over NetherNet
-/// and get a Transfer packet to that server.
+/// and get a Transfer packet to their routed server, or the bot's server.
 /// </summary>
-public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot bot, ILoggerFactory logs)
+public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot bot, FriendRoutes routes, ILoggerFactory logs)
 {
     static readonly TimeSpan SessionRefresh = TimeSpan.FromSeconds(60);
     const int MaxRecentJoins = 50;
@@ -271,7 +271,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                     {
                         var (_, identity, _) = GamePackets.ReadLogin(packet);
                         var (name, xuid) = LoginBuilder.ReadIdentity(identity);
-                        var target = bot.Target;
+                        var target = routes.Resolve(xuid, bot.Target);
                         if (target is null)
                         {
                             conn.Send(codec.Encode([GamePackets.Disconnect("Server is offline", protocol)]));
@@ -282,10 +282,10 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                                 GamePackets.PlayStatusPacket(PlayStatus.LoginSuccess),
                                 GamePackets.Transfer(target.TransferHost, (ushort)target.TransferPort, protocol),
                             ]));
-                            var joined = new JoinedFriend(name ?? "Unknown", xuid, DateTimeOffset.UtcNow);
+                            var joined = new JoinedFriend(name ?? "Unknown", xuid, target.Name, DateTimeOffset.UtcNow);
                             _recent.Enqueue(joined);
                             while (_recent.Count > MaxRecentJoins) _recent.TryDequeue(out _);
-                            _log.LogInformation("Transferred {Name}", joined.Name);
+                            _log.LogInformation("Transferred {Name} to {Server}", joined.Name, joined.Server);
                             FriendJoined?.Invoke(joined);
                             Changed?.Invoke();
                         }

@@ -86,6 +86,7 @@ public sealed class ServersActivity : BaseActivity
         }
         FindViewById<EditText>(Resource.Id.name)!.Text = "";
         FindViewById<EditText>(Resource.Id.host)!.Text = "";
+        await BdsApp.Bridge.Routes.ReloadAsync(CancellationToken.None);
         Toast.MakeText(this, $"Added {name}. Tap it to join.", ToastLength.Short)!.Show();
         await Load();
     }
@@ -104,6 +105,7 @@ public sealed class ServersActivity : BaseActivity
             await ctx.Servers.Where(x => x.Id == s.Id).ExecuteDeleteAsync();
         }
         if (s.IsActive) BdsApp.Bridge.Reload();
+        await BdsApp.Bridge.Routes.ReloadAsync(CancellationToken.None);
         await Load();
     }
 }

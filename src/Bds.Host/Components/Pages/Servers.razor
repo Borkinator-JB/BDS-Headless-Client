@@ -89,6 +89,7 @@
             await ctx.SaveChangesAsync();
         }
         if (_form.IsActive) Bridge.Reload();
+        await Bridge.Routes.ReloadAsync(CancellationToken.None);
         Reset();
         await Load();
     }
@@ -101,6 +102,7 @@
             await ctx.SaveChangesAsync();
         }
         if (s.IsActive) Bridge.Reload();
+        await Bridge.Routes.ReloadAsync(CancellationToken.None);
         await Load();
     }
 
