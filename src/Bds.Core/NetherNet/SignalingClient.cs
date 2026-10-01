@@ -36,6 +36,7 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
     const string SendClientMessageMethod = "Signaling_SendClientMessage_v1_0";
     const string WebRtcMethod = "Signaling_WebRtc_v1_0";
     const string PingMethod = "System_Ping_v1_0";
+    const string DeliveryMethod = "Signaling_DeliveryNotification_V1_0";
 
     ClientWebSocket? _ws;
     CancellationTokenSource? _cts;
@@ -124,20 +125,22 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
 
     async Task PingLoopAsync(CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        // Timing and params match CloudburstMC's NetherNet transport.
         try
         {
-            while (await timer.WaitForNextTickAsync(ct))
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(50));
+            do
             {
                 try
                 {
-                    await RequestAsync(PingMethod, new JsonArray(), ct);
+                    await RequestAsync(PingMethod, new JsonObject(), ct);
                 }
                 catch (Exception e) when (e is TimeoutException or OperationCanceledException && !ct.IsCancellationRequested)
                 {
                     log.LogDebug("Signaling ping timed out");
                 }
-            }
+            } while (await timer.WaitForNextTickAsync(ct));
         }
         catch (Exception e) when (e is OperationCanceledException or WebSocketException or IOException) { }
     }
@@ -201,28 +204,55 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
         if (obj["method"]!.GetValue<string>() == ReceiveMessageMethod)
         {
             var items = obj["params"] is JsonArray arr ? arr : new JsonArray(obj["params"]?.DeepClone());
-            foreach (var item in items) HandleIncoming(item);
+            // Every server request needs a response.
+            if (id is not null)
+                await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = null }, ct);
+            foreach (var item in items) await HandleIncomingAsync(item, ct);
+            return;
         }
 
-        // Every server request needs a response.
         if (id is not null)
             await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = null }, ct);
     }
 
-    void HandleIncoming(JsonNode? item)
+    async Task HandleIncomingAsync(JsonNode? item, CancellationToken ct)
     {
+        var from = item?["From"]?.ToString();
+        if (from is null) return;
         try
         {
-            var from = item?["From"]?.ToString();
             var inner = item?["Message"]?.GetValue<string>() is { } m ? JsonNode.Parse(m) : null;
-            if (from is null || inner?["method"]?.GetValue<string>() != WebRtcMethod) return;
-            var text = inner["params"]?["message"]?.GetValue<string>();
+            var text = inner?["method"]?.GetValue<string>() == WebRtcMethod ? inner["params"]?["message"]?.GetValue<string>() : null;
             if (text is not null && Signal.Parse(from, text) is { } signal) SignalReceived?.Invoke(signal);
         }
         catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException)
         {
             log.LogDebug("Bad signaling message: {Message}", e.Message);
         }
+        await AckAsync(from, item?["Id"]?.ToString() ?? Guid.NewGuid().ToString(), ct);
+    }
+
+    // Tells the sender the message arrived.
+    Task AckAsync(string to, string messageId, CancellationToken ct)
+    {
+        var inner = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"] = DeliveryMethod,
+            ["params"] = new JsonObject { ["messageId"] = messageId },
+        };
+        return SendAsync(new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = Guid.NewGuid().ToString(),
+            ["method"] = SendClientMessageMethod,
+            ["params"] = new JsonObject
+            {
+                ["toPlayerId"] = to,
+                ["messageId"] = Guid.NewGuid().ToString(),
+                ["message"] = inner.ToJsonString(),
+            },
+        }, ct);
     }
 
     internal static string? ReadPmsgId(string mcToken)

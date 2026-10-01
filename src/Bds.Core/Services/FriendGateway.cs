@@ -189,7 +189,14 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
     // Joining friends add themselves to the session and expect a nonce under their xuid.
     async Task SyncNoncesAsync(Guid sessionId, string ownXuid, CancellationToken ct)
     {
-        await _nonceLock.WaitAsync(ct);
+        try
+        {
+            await _nonceLock.WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
         try
         {
             var active = (await _sessions.GetMemberXuidsAsync(sessionId, ct)).Where(x => x != ownXuid).ToHashSet();
@@ -204,10 +211,11 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             }
             if (changed) await _sessions.UpdateNoncesAsync(sessionId, new Dictionary<string, string>(_nonces), ct);
         }
-        catch (Exception e) when (e is XboxApiException or HttpRequestException)
+        catch (Exception e) when (!ct.IsCancellationRequested)
         {
             _log.LogWarning("Nonce update failed: {Message}", e.Message);
         }
+        catch (Exception) when (ct.IsCancellationRequested) { }
         finally
         {
             _nonceLock.Release();
