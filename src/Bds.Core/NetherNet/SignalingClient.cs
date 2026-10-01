@@ -171,12 +171,12 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
     async Task HandleAsync(JsonNode? msg, CancellationToken ct)
     {
         if (msg is not JsonObject obj) return;
-        var id = obj["id"]?.ToString();
+        var id = obj["id"];
 
         // Response to one of our requests.
         if (obj["method"] is null)
         {
-            if (id is not null && _pending.TryGetValue(id, out var tcs))
+            if (id is not null && _pending.TryGetValue(id.ToString(), out var tcs))
             {
                 if (obj["error"] is { } error) tcs.TrySetException(new IOException($"Signaling error: {error.ToJsonString()}"));
                 else tcs.TrySetResult(obj["result"]);
@@ -184,18 +184,15 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
             return;
         }
 
+        // Every server request needs a response with the same id, number or string.
+        if (id is not null)
+            await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id.DeepClone(), ["result"] = null }, ct);
+
         if (obj["method"]!.GetValue<string>() == ReceiveMessageMethod)
         {
             var items = obj["params"] is JsonArray arr ? arr : new JsonArray(obj["params"]?.DeepClone());
-            // Every server request needs a response.
-            if (id is not null)
-                await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = null }, ct);
             foreach (var item in items) await HandleIncomingAsync(item, ct);
-            return;
         }
-
-        if (id is not null)
-            await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = null }, ct);
     }
 
     async Task HandleIncomingAsync(JsonNode? item, CancellationToken ct)
