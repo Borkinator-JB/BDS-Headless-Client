@@ -99,8 +99,9 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         var pmsgId = signaling.PmsgId!;
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        signaling.Closed += reason => linked.Cancel();
-        rta.Closed += reason => linked.Cancel();
+        string? closed = null;
+        signaling.Closed += reason => { closed ??= $"Signaling: {reason}"; linked.Cancel(); };
+        rta.Closed += reason => { closed ??= $"Xbox RTA: {reason}"; linked.Cancel(); };
         signaling.SignalReceived += signal => _ = HandleSignalAsync(signaling, signal, turn, linked.Token);
 
         try
@@ -125,7 +126,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new IOException("Xbox or signaling connection closed");
+            throw new IOException(closed ?? "Xbox or signaling connection closed");
         }
         finally
         {
