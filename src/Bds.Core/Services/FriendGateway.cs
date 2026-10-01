@@ -115,6 +115,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                 if (bot.Pong is null || bot.Target != lastTarget) return;
                 await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId), linked.Token);
                 await SetPresenceAsync(xuid, linked.Token);
+                await LogFriendSessionsAsync(xuid, linked.Token);
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -126,6 +127,26 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             foreach (var c in _connections.Values) await c.DisposeAsync();
             _connections.Clear();
             await _sessions.LeaveAsync(sessionId, CancellationToken.None);
+        }
+    }
+
+    readonly HashSet<string> _loggedFriendSessions = [];
+
+    // Diagnostics: logs sessions published by real Minecraft clients so ours can match them.
+    async Task LogFriendSessionsAsync(string xuid, CancellationToken ct)
+    {
+        try
+        {
+            foreach (var handle in await _sessions.QueryFriendHandlesAsync(xuid, ct))
+            {
+                var name = handle?["sessionRef"]?["name"]?.GetValue<string>();
+                if (handle is null || name is null || handle["ownerXuid"]?.GetValue<string>() == xuid || !_loggedFriendSessions.Add(name)) continue;
+                _log.LogInformation("Friend session: {Json}", handle.ToJsonString());
+            }
+        }
+        catch (Exception e) when (e is XboxApiException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            _log.LogWarning("Friend session query failed: {Message}", e.Message);
         }
     }
 
