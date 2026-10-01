@@ -75,6 +75,15 @@ public class TransportTests
     }
 
     [Fact]
+    public void PmsgId_Is_Read_From_McToken()
+    {
+        static string Part(string json) => Bds.Core.Util.Base64Url.Encode(System.Text.Encoding.UTF8.GetBytes(json));
+        var token = $"MCToken {Part("{\"alg\":\"none\"}")}.{Part("{\"pmid\":\"abc-123\"}")}.sig";
+        Assert.Equal("abc-123", SignalingClient.ReadPmsgId(token));
+        Assert.Null(SignalingClient.ReadPmsgId("MCToken nope"));
+    }
+
+    [Fact]
     public void Signal_Parses_And_Formats()
     {
         var s = Signal.Parse("123", "CONNECTREQUEST 99 v=0\r\no=- 1 2 IN IP4 127.0.0.1");

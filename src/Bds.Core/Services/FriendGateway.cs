@@ -29,6 +29,8 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
 
     readonly ILogger _log = logs.CreateLogger<FriendGateway>();
     readonly SessionDirectoryClient _sessions = new(xbox);
+    readonly ConcurrentDictionary<string, string> _nonces = new();
+    readonly SemaphoreSlim _nonceLock = new(1, 1);
     readonly PresenceClient _presence = new(xbox);
     readonly ConcurrentDictionary<ulong, NetherNetConnection> _connections = new();
     readonly ConcurrentQueue<JoinedFriend> _recent = new();
@@ -93,6 +95,8 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         await using var rta = new RtaClient(account, _log);
         var connectionId = await rta.ConnectAsync(xuid, ct);
         rta.SocialChanged += () => SocialChanged?.Invoke();
+        _nonces.Clear();
+        var pmsgId = signaling.PmsgId!;
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         signaling.Closed += reason => linked.Cancel();
@@ -101,7 +105,8 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
 
         try
         {
-            await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId), ct);
+            await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId, pmsgId), ct);
+            rta.SessionChanged += () => _ = SyncNoncesAsync(sessionId, xuid, linked.Token);
             await _sessions.SetActivityAsync(sessionId, ct);
             await SetPresenceAsync(xuid, ct);
             backoff.Reset();
@@ -113,7 +118,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             while (await timer.WaitForNextTickAsync(linked.Token))
             {
                 if (bot.Pong is null || bot.Target != lastTarget) return;
-                await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId), linked.Token);
+                await _sessions.CreateOrUpdateAsync(sessionId, xuid, connectionId, Info(networkId, pmsgId), linked.Token);
                 await SetPresenceAsync(xuid, linked.Token);
                 await LogFriendSessionsAsync(xuid, linked.Token);
             }
@@ -165,7 +170,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         }
     }
 
-    SessionInfo Info(ulong networkId)
+    SessionInfo Info(ulong networkId, string pmsgId)
     {
         var pong = bot.Pong!;
         return new SessionInfo(
@@ -175,7 +180,37 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
             pong.Protocol,
             pong.Players,
             pong.MaxPlayers,
-            networkId);
+            networkId,
+            pmsgId,
+            new Dictionary<string, string>(_nonces));
+    }
+
+    // Joining friends add themselves to the session and expect a nonce under their xuid.
+    async Task SyncNoncesAsync(Guid sessionId, string ownXuid, CancellationToken ct)
+    {
+        await _nonceLock.WaitAsync(ct);
+        try
+        {
+            var active = (await _sessions.GetMemberXuidsAsync(sessionId, ct)).Where(x => x != ownXuid).ToHashSet();
+            var changed = false;
+            foreach (var stale in _nonces.Keys.Where(x => !active.Contains(x)).ToList())
+                changed |= _nonces.TryRemove(stale, out _);
+            foreach (var x in active.Where(x => !_nonces.ContainsKey(x)))
+            {
+                _nonces[x] = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8));
+                changed = true;
+                _log.LogInformation("Friend {Xuid} is joining", x);
+            }
+            if (changed) await _sessions.UpdateNoncesAsync(sessionId, new Dictionary<string, string>(_nonces), ct);
+        }
+        catch (Exception e) when (e is XboxApiException or HttpRequestException)
+        {
+            _log.LogWarning("Nonce update failed: {Message}", e.Message);
+        }
+        finally
+        {
+            _nonceLock.Release();
+        }
     }
 
     async Task HandleSignalAsync(SignalingClient signaling, Signal signal, List<TurnServer> turn, CancellationToken ct)

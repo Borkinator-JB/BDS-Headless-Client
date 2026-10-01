@@ -19,6 +19,7 @@ public sealed class RtaClient(XboxAccount account, ILogger log) : IAsyncDisposab
 
     public event Action<string>? Closed;
     public event Action? SocialChanged;
+    public event Action? SessionChanged;
 
     public async Task<string> ConnectAsync(string xuid, CancellationToken ct)
     {
@@ -98,7 +99,11 @@ public sealed class RtaClient(XboxAccount account, ILogger log) : IAsyncDisposab
         if (type == 1 && msg.Count >= 5 && msg[4] is JsonObject payload && payload["ConnectionId"]?.GetValue<string>() is { } id)
             _connectionId.TrySetResult(id);
         else if (type == 3)
-            SocialChanged?.Invoke();
+        {
+            // Session subscriptions carry "ncid"; everything else is the friends subscription.
+            if (msg.Count >= 3 && msg[2] is JsonObject data && data.ContainsKey("ncid")) SessionChanged?.Invoke();
+            else SocialChanged?.Invoke();
+        }
     }
 
     public async ValueTask DisposeAsync()
