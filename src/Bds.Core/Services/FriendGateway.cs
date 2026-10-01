@@ -146,12 +146,12 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         {
             var own = await _sessions.QueryOwnHandlesAsync(xuid, ct);
             var friends = await _sessions.QueryFriendHandlesAsync(xuid, ct);
-            _log.LogInformation("Session check: own handles {Own}, friend handles {Friends}", own.Count, friends.Count);
+            _log.LogDebug("Session check: own handles {Own}, friend handles {Friends}", own.Count, friends.Count);
             foreach (var handle in friends)
             {
                 var name = handle?["sessionRef"]?["name"]?.GetValue<string>();
                 if (handle is null || name is null || handle["ownerXuid"]?.GetValue<string>() == xuid || !_loggedFriendSessions.Add(name)) continue;
-                _log.LogInformation("Friend session: {Json}", handle.ToJsonString());
+                _log.LogDebug("Friend session: {Json}", handle.ToJsonString());
             }
         }
         catch (Exception e) when (e is XboxApiException or System.Text.Json.JsonException or InvalidOperationException)

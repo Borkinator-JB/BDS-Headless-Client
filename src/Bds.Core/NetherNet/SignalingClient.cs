@@ -118,7 +118,7 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
         try
         {
             var text = msg.ToJsonString();
-            log.LogInformation("Signal out: {Text}", Trim(text));
+            log.LogDebug("Signal out: {Text}", Trim(text));
             await _ws.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, ct);
         }
         finally
@@ -148,7 +148,7 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
                     ms.Write(buf, 0, res.Count);
                 } while (!res.EndOfMessage);
 
-                log.LogInformation("Signal in: {Text}", Trim(Encoding.UTF8.GetString(ms.ToArray())));
+                log.LogDebug("Signal in: {Text}", Trim(Encoding.UTF8.GetString(ms.ToArray())));
                 var node = JsonNode.Parse(ms.ToArray());
                 if (node is JsonArray batch)
                     foreach (var item in batch) await HandleAsync(item, ct);
@@ -235,7 +235,7 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
         }, ct);
     }
 
-    // Diagnostics while the server's close reason is unknown.
+    // Debug log only: messages carry TURN credentials and IP addresses.
     static string Trim(string text) => text.Length > 400 ? text[..400] + "…" : text;
 
     internal static string? ReadPmsgId(string mcToken)
