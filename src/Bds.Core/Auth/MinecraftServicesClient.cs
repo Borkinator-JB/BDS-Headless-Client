@@ -1,34 +1,15 @@
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text.Json.Nodes;
-using Bds.Core.Util;
 
 namespace Bds.Core.Auth;
 
 public sealed record McToken(string AuthorizationHeader, DateTimeOffset ValidUntil);
 
-/// <summary>Minecraft login chain, PlayFab and franchise services tokens.</summary>
+/// <summary>PlayFab and franchise services tokens.</summary>
 public sealed class MinecraftServicesClient(HttpClient http)
 {
-    const string ChainUrl = "https://multiplayer.minecraft.net/authentication";
     const string PlayFabUrl = "https://20ca2.playfabapi.com/Client/LoginWithXbox";
     const string SessionStartUrl = "https://authorization.franchise.minecraft-services.net/api/v1.0/session/start";
-    const string MultiplayerStartUrl = "https://authorization.franchise.minecraft-services.net/api/v1.0/multiplayer/session/start";
-
-    public async Task<List<string>> GetChainAsync(XstsToken xsts, ECDsa identityKey, CancellationToken ct)
-    {
-        using var req = new HttpRequestMessage(HttpMethod.Post, ChainUrl)
-        {
-            Content = JsonContent.Create(new JsonObject { ["identityPublicKey"] = Jwt.ExportX5u(identityKey) }),
-        };
-        req.Headers.TryAddWithoutValidation("Authorization", xsts.Header);
-        req.Headers.Add("Client-Version", "1.21.0");
-        using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode) throw new AuthException($"Minecraft authentication failed ({(int)res.StatusCode}): {await ErrorTextAsync(res, ct)}");
-        var body = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
-        return body?["chain"]?.AsArray().Select(n => n!.GetValue<string>()).ToList()
-            ?? throw new AuthException("No chain in Minecraft authentication response");
-    }
 
     public async Task<string> GetPlayFabTicketAsync(XstsToken playFabXsts, CancellationToken ct)
     {
@@ -118,22 +99,5 @@ public sealed class MinecraftServicesClient(HttpClient http)
         var text = (await res.Content.ReadAsStringAsync(ct)).Trim();
         if (text.Length == 0) return "no details";
         return text.Length > 300 ? text[..300] : text;
-    }
-
-    /// <summary>
-    /// Newer login token (1.21.90+), bound to <paramref name="identityKey"/>. RakNet servers still accept
-    /// the legacy chain without it; NetherNet servers need it for the WebRTC identity.
-    /// </summary>
-    public async Task<string> GetMultiplayerTokenAsync(McToken mcToken, ECDsa identityKey, CancellationToken ct)
-    {
-        using var req = new HttpRequestMessage(HttpMethod.Post, MultiplayerStartUrl)
-        {
-            Content = JsonContent.Create(new JsonObject { ["publicKey"] = Jwt.ExportX5u(identityKey) }),
-        };
-        req.Headers.TryAddWithoutValidation("Authorization", mcToken.AuthorizationHeader);
-        using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode) throw new AuthException($"Multiplayer token failed ({(int)res.StatusCode}): {await ErrorTextAsync(res, ct)}");
-        var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
-        return json?["result"]?["signedToken"]?.GetValue<string>() ?? throw new AuthException("No multiplayer token");
     }
 }

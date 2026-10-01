@@ -34,7 +34,6 @@ public sealed class XboxAccount(HttpClient http, ITokenStore store, ILogger<Xbox
     public string? Gamertag => _state?.Gamertag;
     public string? Xuid => _state?.Xuid;
     public Guid DeviceId => _state?.DeviceId ?? Guid.Empty;
-    public MinecraftServicesClient Minecraft => _mc;
 
     public event Action? Changed;
 

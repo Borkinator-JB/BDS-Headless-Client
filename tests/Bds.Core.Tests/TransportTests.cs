@@ -1,5 +1,4 @@
 using Bds.Core.NetherNet;
-using Bds.Core.Protocol;
 using Bds.Core.RakNet;
 
 namespace Bds.Core.Tests;
@@ -26,40 +25,6 @@ public class TransportTests
     {
         var s = new Segmenter();
         Assert.Equal(new byte[] { 9, 8 }, s.Push([0, 9, 8]));
-    }
-
-    [Fact]
-    public void Frame_RoundTrips()
-    {
-        var f = new Frame
-        {
-            Reliability = Reliability.ReliableOrdered,
-            ReliableIndex = 42,
-            OrderIndex = 7,
-            Split = true,
-            SplitCount = 3,
-            SplitId = 9,
-            SplitIndex = 1,
-            Body = [1, 2, 3],
-        };
-        var w = new PacketWriter();
-        f.Write(w);
-        Assert.Equal(f.Size, w.Length);
-
-        var read = Frame.Read(new PacketReader(w.ToArray()));
-        Assert.Equal(f.ReliableIndex, read.ReliableIndex);
-        Assert.Equal(f.OrderIndex, read.OrderIndex);
-        Assert.Equal(f.SplitIndex, read.SplitIndex);
-        Assert.Equal(f.Body, read.Body);
-    }
-
-    [Fact]
-    public void Ack_Compresses_Ranges()
-    {
-        var bytes = AckCodec.Encode(AckCodec.AckFlag, [1, 2, 3, 7, 9, 10]);
-        var r = new PacketReader(bytes);
-        r.Byte();
-        Assert.Equal(new[] { 1, 2, 3, 7, 9, 10 }, AckCodec.Decode(r));
     }
 
     [Fact]

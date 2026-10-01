@@ -252,7 +252,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        using var codec = new BatchCodec();
+        var codec = new BatchCodec();
         try
         {
             await conn.Opened.WaitAsync(timeout.Token);

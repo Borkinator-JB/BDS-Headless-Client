@@ -18,8 +18,6 @@ public sealed class MainActivity : BaseActivity
 {
     TextView _status = null!;
     Button _toggle = null!;
-    TextView _playersTitle = null!;
-    ArrayAdapter<string> _players = null!;
     ArrayAdapter<string> _joins = null!;
 
     static BridgeService Bridge => BdsApp.Bridge;
@@ -31,10 +29,7 @@ public sealed class MainActivity : BaseActivity
 
         _status = FindViewById<TextView>(Resource.Id.status)!;
         _toggle = FindViewById<Button>(Resource.Id.toggle)!;
-        _playersTitle = FindViewById<TextView>(Resource.Id.players_title)!;
-        _players = new ArrayAdapter<string>(this, global::Android.Resource.Layout.SimpleListItem1);
         _joins = new ArrayAdapter<string>(this, global::Android.Resource.Layout.SimpleListItem1);
-        FindViewById<ListView>(Resource.Id.players)!.Adapter = _players;
         FindViewById<ListView>(Resource.Id.joins)!.Adapter = _joins;
 
         _toggle.Click += (_, _) => Toggle();
@@ -89,10 +84,6 @@ public sealed class MainActivity : BaseActivity
         _status.Text = StatusText.Long(Bridge);
         _toggle.Text = GetString(GatewayService.Running ? Resource.String.stop : Resource.String.start);
 
-        var players = Bridge.Bot.Players.Select(p => p.Name).ToList();
-        _playersTitle.Text = $"{GetString(Resource.String.players)} ({players.Count})";
-        _players.Clear();
-        _players.AddAll(players);
         _joins.Clear();
         _joins.AddAll(Bridge.Gateway.RecentJoins.Select(j => $"{j.Name} → {j.Server}  {j.Time.ToLocalTime():t}").ToList());
     }

@@ -10,7 +10,9 @@ static class StatusText
         if (bridge.Account.State == AccountState.WaitingForCode) return "Waiting for sign in";
         if (bridge.Account.State != AccountState.SignedIn) return "Not signed in";
         if (bridge.ActiveServer is null) return "No server selected";
-        return $"{bridge.ActiveServer.Name}: {bridge.Bot.State}, {bridge.Bot.Players.Count} players";
+        return bridge.Bot.Pong is { } pong
+            ? $"{bridge.ActiveServer.Name}: {bridge.Bot.State}, {pong.Players}/{pong.MaxPlayers} players"
+            : $"{bridge.ActiveServer.Name}: {bridge.Bot.State}";
     }
 
     public static string Long(BridgeService bridge)
@@ -25,7 +27,7 @@ static class StatusText
                 _ => "Account: not signed in",
             },
             $"Server: {bridge.ActiveServer?.Name ?? "none"}",
-            $"Bot: {bridge.Bot.State} {bridge.Bot.Status}",
+            $"Server status: {bridge.Bot.State} {bridge.Bot.Status}",
             $"Friends can join: {bridge.Gateway.State} {bridge.Gateway.Status}",
         };
         if (bridge.Bot.Pong is { } pong) lines.Add($"{pong.Motd} · {pong.Version} · {pong.Players}/{pong.MaxPlayers}");

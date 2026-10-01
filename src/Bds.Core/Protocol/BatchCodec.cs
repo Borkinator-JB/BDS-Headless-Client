@@ -9,17 +9,14 @@ public enum CompressionAlgorithm : ushort
     None = 0xFFFF,
 }
 
-/// <summary>Frames game packets into batches: length prefix, compression, encryption.</summary>
-public sealed class BatchCodec : IDisposable
+/// <summary>Frames game packets into batches: length prefix and compression.</summary>
+public sealed class BatchCodec
 {
     const byte NoCompressionId = 0xFF;
 
     public bool CompressionEnabled { get; private set; }
     public CompressionAlgorithm Algorithm { get; private set; }
     public int Threshold { get; private set; } = 1;
-
-    BedrockCipher? _encrypt;
-    BedrockCipher? _decrypt;
 
     public void EnableCompression(CompressionAlgorithm algorithm, int threshold)
     {
@@ -28,12 +25,6 @@ public sealed class BatchCodec : IDisposable
         Algorithm = algorithm;
         Threshold = Math.Max(threshold, 0);
         CompressionEnabled = true;
-    }
-
-    public void EnableEncryption(byte[] key)
-    {
-        _encrypt = new BedrockCipher(key);
-        _decrypt = new BedrockCipher(key);
     }
 
     public byte[] Encode(IEnumerable<byte[]> packets)
@@ -51,12 +42,12 @@ public sealed class BatchCodec : IDisposable
             body.CopyTo(framed, 1);
             data = framed;
         }
-        return _encrypt?.Encrypt(data) ?? data;
+        return data;
     }
 
     public List<Packet> Decode(ReadOnlySpan<byte> input)
     {
-        var data = _decrypt?.Decrypt(input) ?? input.ToArray();
+        var data = input.ToArray();
         if (CompressionEnabled)
         {
             if (data.Length == 0) throw new InvalidDataException("Empty batch");
@@ -98,11 +89,5 @@ public sealed class BatchCodec : IDisposable
             if (output.Length > 64 * 1024 * 1024) throw new InvalidDataException("Batch too large");
         }
         return output.ToArray();
-    }
-
-    public void Dispose()
-    {
-        _encrypt?.Dispose();
-        _decrypt?.Dispose();
     }
 }
