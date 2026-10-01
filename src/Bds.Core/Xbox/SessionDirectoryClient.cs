@@ -78,16 +78,22 @@ public sealed class SessionDirectoryClient(XboxHttp xbox)
     }
 
     /// <summary>Activity handles of the account's friends, with session custom properties.</summary>
-    public async Task<JsonArray> QueryFriendHandlesAsync(string xuid, CancellationToken ct)
+    public Task<JsonArray> QueryFriendHandlesAsync(string xuid, CancellationToken ct) =>
+        QueryHandlesAsync(new JsonObject
+        {
+            ["people"] = new JsonObject { ["moniker"] = "people", ["monikerXuid"] = xuid },
+        }, ct);
+
+    public Task<JsonArray> QueryOwnHandlesAsync(string xuid, CancellationToken ct) =>
+        QueryHandlesAsync(new JsonObject { ["xuids"] = new JsonArray(xuid) }, ct);
+
+    async Task<JsonArray> QueryHandlesAsync(JsonObject owners, CancellationToken ct)
     {
         var body = new JsonObject
         {
             ["type"] = "activity",
             ["scid"] = Scid,
-            ["owners"] = new JsonObject
-            {
-                ["people"] = new JsonObject { ["moniker"] = "people", ["monikerXuid"] = xuid },
-            },
+            ["owners"] = owners,
         };
         var res = await xbox.SendAsync(HttpMethod.Post,
             "https://sessiondirectory.xboxlive.com/handles/query?include=relatedInfo,customProperties", 107, body, ct);
