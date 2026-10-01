@@ -269,6 +269,7 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         {
             await conn.Opened.WaitAsync(timeout.Token);
             var protocol = bot.Pong?.Protocol ?? 0;
+            string? name = null, xuid = null;
             await foreach (var batch in conn.Incoming.ReadAllAsync(timeout.Token))
             {
                 foreach (var packet in codec.Decode(batch))
@@ -276,33 +277,36 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                     if (packet.Id == PacketId.RequestNetworkSettings)
                     {
                         protocol = GamePackets.ReadRequestNetworkSettings(packet);
-                        conn.Send(codec.Encode([GamePackets.NetworkSettingsPacket(1, CompressionAlgorithm.Zlib)]));
-                        codec.EnableCompression(CompressionAlgorithm.Zlib, 1);
+                        conn.Send(codec.Encode([GamePackets.NetworkSettingsPacket(0, CompressionAlgorithm.Zlib)]));
+                        codec.EnableCompression(CompressionAlgorithm.Zlib, 0);
                     }
                     else if (packet.Id == PacketId.Login)
                     {
                         var (_, identity, _) = GamePackets.ReadLogin(packet);
-                        var (name, xuid) = LoginBuilder.ReadIdentity(identity);
-                        var target = routes.Resolve(xuid, bot.Target);
-                        if (target is null)
+                        (name, xuid) = LoginBuilder.ReadIdentity(identity);
+                        if (bot.Target is null && routes.Resolve(xuid, null) is null)
                         {
                             conn.Send(codec.Encode([GamePackets.Disconnect("Server is offline", protocol)]));
+                            await Task.Delay(TimeSpan.FromSeconds(2), timeout.Token);
+                            return;
                         }
-                        else
+                        conn.Send(codec.Encode([GamePackets.PlayStatusPacket(PlayStatus.LoginSuccess), GamePackets.ResourcePacksInfo()]));
+                    }
+                    else if (packet.Id == PacketId.ResourcePackClientResponse)
+                    {
+                        switch (GamePackets.ReadResourcePackResponse(packet))
                         {
-                            conn.Send(codec.Encode([
-                                GamePackets.PlayStatusPacket(PlayStatus.LoginSuccess),
-                                GamePackets.Transfer(target.TransferHost, (ushort)target.TransferPort, protocol),
-                            ]));
-                            var joined = new JoinedFriend(name ?? "Unknown", xuid, target.Name, DateTimeOffset.UtcNow);
-                            _recent.Enqueue(joined);
-                            while (_recent.Count > MaxRecentJoins) _recent.TryDequeue(out _);
-                            _log.LogInformation("Transferred {Name} to {Server}", joined.Name, joined.Server);
-                            FriendJoined?.Invoke(joined);
-                            Changed?.Invoke();
+                            case 2:
+                                conn.Send(codec.Encode([GamePackets.ResourcePackStack()]));
+                                break;
+                            case 3:
+                                await TransferAsync(conn, codec, protocol, name, xuid, timeout.Token);
+                                return;
+                            default:
+                                conn.Send(codec.Encode([GamePackets.Disconnect("disconnectionScreen.resourcePack", protocol)]));
+                                await Task.Delay(TimeSpan.FromSeconds(2), timeout.Token);
+                                return;
                         }
-                        await Task.Delay(TimeSpan.FromSeconds(2), timeout.Token);
-                        return;
                     }
                 }
             }
@@ -315,6 +319,32 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
         {
             if (_connections.TryRemove(conn.ConnectionId, out _)) await conn.DisposeAsync();
         }
+    }
+
+    // Same order as MCXboxBroadcast: clients ignore a Transfer before StartGame.
+    async Task TransferAsync(NetherNetConnection conn, BatchCodec codec, int protocol, string? name, string? xuid, CancellationToken ct)
+    {
+        var target = routes.Resolve(xuid, bot.Target);
+        if (target is null)
+        {
+            conn.Send(codec.Encode([GamePackets.Disconnect("Server is offline", protocol)]));
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            return;
+        }
+        var level = bot.Pong?.LevelName is { Length: > 0 } l ? l : account.Gamertag ?? "Server";
+        conn.Send(codec.Encode([
+            GamePackets.JigsawStructureData(),
+            GamePackets.VoxelShapes(),
+            GamePackets.StartGame(level),
+            GamePackets.Transfer(target.TransferHost, (ushort)target.TransferPort, protocol),
+        ]));
+        var joined = new JoinedFriend(name ?? "Unknown", xuid, target.Name, DateTimeOffset.UtcNow);
+        _recent.Enqueue(joined);
+        while (_recent.Count > MaxRecentJoins) _recent.TryDequeue(out _);
+        _log.LogInformation("Transferred {Name} to {Server}", joined.Name, joined.Server);
+        FriendJoined?.Invoke(joined);
+        Changed?.Invoke();
+        await Task.Delay(TimeSpan.FromSeconds(2), ct);
     }
 
     void Set(GatewayState state, string? status)

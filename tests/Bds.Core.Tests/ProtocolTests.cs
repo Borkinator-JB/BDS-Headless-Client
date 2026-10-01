@@ -52,6 +52,23 @@ public class ProtocolTests
     }
 
     [Fact]
+    public void StartGame_Matches_v2193_Layout()
+    {
+        // 194 bytes with "MCXboxBroadcast" (15 chars) as traced from CloudburstMC's v2193 serializers.
+        var p = Packet.Decode(GamePackets.StartGame("MCXboxBroadcast"));
+        Assert.Equal(PacketId.StartGame, p.Id);
+        Assert.Equal(194, p.Body.Length);
+        Assert.Equal(66f, new PacketReader(p.Body[7..]).FloatLE());
+    }
+
+    [Fact]
+    public void Transfer_Has_Gatherings_Flag_On_New_Protocols()
+    {
+        Assert.Equal(1 + 9 + 2 + 2, Packet.Decode(GamePackets.Transfer("a.example", 19132, 2193)).Body.Length);
+        Assert.Equal(1 + 9 + 2 + 1, Packet.Decode(GamePackets.Transfer("a.example", 19132, 800)).Body.Length);
+    }
+
+    [Fact]
     public void Login_Is_Read()
     {
         var packet = Packet.Decode(Packet.Encode(PacketId.Login, w =>
