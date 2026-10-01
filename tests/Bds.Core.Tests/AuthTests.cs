@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
 using Bds.Core.Auth;
-using Bds.Core.Protocol;
-using Bds.Core.Util;
 
 namespace Bds.Core.Tests;
 
@@ -52,30 +50,11 @@ public class AuthTests
         Assert.Equal(new byte[] { 0, 0, 0, 1 }, header[..4]);
     }
 
-    [Fact]
-    public void Identity_Chain_Is_Signed_And_Readable()
-    {
-        using var mojang = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        var mojangToken = Jwt.SignEs384(
-            new() { ["alg"] = "ES384", ["x5u"] = Jwt.ExportX5u(mojang) },
-            new() { ["extraData"] = new System.Text.Json.Nodes.JsonObject { ["displayName"] = "Bot", ["XUID"] = "42" } },
-            mojang);
-
-        var legacy = LoginBuilder.Identity([mojangToken], key, null, 700);
-        var modern = LoginBuilder.Identity([mojangToken], key, "tok", LoginBuilder.ProtocolTokenLogin);
-
-        Assert.Equal(("Bot", "42"), LoginBuilder.ReadIdentity(legacy));
-        Assert.Equal(("Bot", "42"), LoginBuilder.ReadIdentity(modern));
-    }
-
-    [Fact]
-    public void Ecdh_Shared_Secret_Matches()
-    {
-        using var a = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP384);
-        using var b = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP384);
-        var x5uB = Convert.ToBase64String(b.ExportSubjectPublicKeyInfo());
-        var x5uA = Convert.ToBase64String(a.ExportSubjectPublicKeyInfo());
-        Assert.Equal(LoginBuilder.SharedSecret(a, x5uB), LoginBuilder.SharedSecret(b, x5uA));
-    }
+    [Theory]
+    [InlineData("26.51", "26.51.0")]
+    [InlineData("1.21.100", "1.21.100")]
+    [InlineData("v1.21", "1.21.0")]
+    [InlineData("", "1.21.0")]
+    public void Version_Is_Normalized(string input, string expected) =>
+        Assert.Equal(expected, MinecraftServicesClient.NormalizeVersion(input));
 }

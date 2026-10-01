@@ -1,5 +1,4 @@
 using Bds.Core.NetherNet;
-using Bds.Core.Protocol;
 using Bds.Core.RakNet;
 
 namespace Bds.Core.Tests;
@@ -29,40 +28,6 @@ public class TransportTests
     }
 
     [Fact]
-    public void Frame_RoundTrips()
-    {
-        var f = new Frame
-        {
-            Reliability = Reliability.ReliableOrdered,
-            ReliableIndex = 42,
-            OrderIndex = 7,
-            Split = true,
-            SplitCount = 3,
-            SplitId = 9,
-            SplitIndex = 1,
-            Body = [1, 2, 3],
-        };
-        var w = new PacketWriter();
-        f.Write(w);
-        Assert.Equal(f.Size, w.Length);
-
-        var read = Frame.Read(new PacketReader(w.ToArray()));
-        Assert.Equal(f.ReliableIndex, read.ReliableIndex);
-        Assert.Equal(f.OrderIndex, read.OrderIndex);
-        Assert.Equal(f.SplitIndex, read.SplitIndex);
-        Assert.Equal(f.Body, read.Body);
-    }
-
-    [Fact]
-    public void Ack_Compresses_Ranges()
-    {
-        var bytes = AckCodec.Encode(AckCodec.AckFlag, [1, 2, 3, 7, 9, 10]);
-        var r = new PacketReader(bytes);
-        r.Byte();
-        Assert.Equal(new[] { 1, 2, 3, 7, 9, 10 }, AckCodec.Decode(r));
-    }
-
-    [Fact]
     public void Pong_Parses()
     {
         var pong = ServerPong.Parse("MCPE;My Server;800;1.21.80;3;10;123;Bedrock level;Survival;1;19132;19133;");
@@ -72,6 +37,15 @@ public class TransportTests
         Assert.Equal(3, pong.Players);
         Assert.Equal(10, pong.MaxPlayers);
         Assert.Equal("Bedrock level", pong.LevelName);
+    }
+
+    [Fact]
+    public void PmsgId_Is_Read_From_McToken()
+    {
+        static string Part(string json) => Bds.Core.Util.Base64Url.Encode(System.Text.Encoding.UTF8.GetBytes(json));
+        var token = $"MCToken {Part("{\"alg\":\"none\"}")}.{Part("{\"pmid\":\"abc-123\"}")}.sig";
+        Assert.Equal("abc-123", SignalingClient.ReadPmsgId(token));
+        Assert.Null(SignalingClient.ReadPmsgId("MCToken nope"));
     }
 
     [Fact]

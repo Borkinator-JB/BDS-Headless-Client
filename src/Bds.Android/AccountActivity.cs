@@ -8,8 +8,8 @@ using Bds.Core.Auth;
 
 namespace Bds.Android;
 
-[Activity(Label = "@string/account", ParentActivity = typeof(MainActivity))]
-public sealed class AccountActivity : AppCompatActivity
+[Activity(Label = "@string/account")]
+public sealed class AccountActivity : BaseActivity
 {
     TextView _status = null!;
     TextView _code = null!;
@@ -21,8 +21,7 @@ public sealed class AccountActivity : AppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        SetContentView(Resource.Layout.activity_account);
-        SupportActionBar?.SetDisplayHomeAsUpEnabled(true);
+        SetScreen(Resource.Layout.activity_account);
 
         _status = FindViewById<TextView>(Resource.Id.status)!;
         _code = FindViewById<TextView>(Resource.Id.code)!;
@@ -37,7 +36,14 @@ public sealed class AccountActivity : AppCompatActivity
     {
         base.OnResume();
         Account.Changed += OnChanged;
-        await BdsApp.Bridge.InitializeAsync(CancellationToken.None);
+        try
+        {
+            await BdsApp.Bridge.InitializeAsync(CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            ShowError(e);
+        }
         Refresh();
     }
 
@@ -57,7 +63,7 @@ public sealed class AccountActivity : AppCompatActivity
         (_status.Text, _action.Text) = Account.State switch
         {
             AccountState.SignedIn => ($"Signed in as {Account.Gamertag}", GetString(Resource.String.sign_out)),
-            AccountState.WaitingForCode => ($"Open {pending?.VerificationUri} and enter this code:", "Cancel"),
+            AccountState.WaitingForCode => ($"Open {pending?.VerificationUri} and enter this code. After approving, switch back to this app. It signs in by itself.", "Cancel"),
             AccountState.Error => (Account.Error ?? "Error", GetString(Resource.String.sign_in)),
             _ => ("Sign in with the Microsoft account the bot should use. A separate account is recommended.", GetString(Resource.String.sign_in)),
         };
@@ -76,12 +82,15 @@ public sealed class AccountActivity : AppCompatActivity
             default:
                 try
                 {
+                    // Foreground service keeps the process alive while you are in the browser.
+                    GatewayService.Start(this);
                     await Account.BeginSignInAsync(CancellationToken.None);
                     CopyAndOpen();
                 }
-                catch (HttpRequestException e)
+                catch (Exception e)
                 {
-                    _status.Text = $"Could not reach Microsoft: {e.Message}";
+                    ShowError(e);
+                    _status.Text = $"Could not start sign in: {e.Message}";
                 }
                 break;
         }

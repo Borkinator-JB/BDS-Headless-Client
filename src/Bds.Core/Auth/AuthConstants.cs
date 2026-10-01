@@ -8,6 +8,5 @@ public static class AuthConstants
     public const string PlayFabTitleId = "20CA2";
 
     public const string XboxLiveRelyingParty = "http://xboxlive.com";
-    public const string MinecraftRelyingParty = "https://multiplayer.minecraft.net/";
     public const string PlayFabRelyingParty = "http://playfab.xboxlive.com/";
 }

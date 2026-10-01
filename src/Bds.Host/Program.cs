@@ -91,7 +91,7 @@ api.MapGet("/status", (BridgeService bridge) => new
     server = bridge.ActiveServer?.Name,
     bot = bridge.Bot.State.ToString(),
     gateway = bridge.Gateway.State.ToString(),
-    players = bridge.Bot.Players.Count,
+    players = bridge.Bot.Pong?.Players ?? 0,
 });
 
 api.MapPost("/shutdown", (IHostApplicationLifetime life) =>

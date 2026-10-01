@@ -53,14 +53,15 @@ main { flex: 1; padding: 1.5rem; max-width: 960px; }
 
 .list { list-style: none; padding: 0; margin: 0; }
 .list li { padding: .4rem 0; border-bottom: 1px solid var(--border); display: flex; gap: .5rem; align-items: center; }
-.list li button { margin-left: auto; }
+.list li button, .list li .route { margin-left: auto; }
+.list li .route + button { margin-left: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
 .dot.on { background: var(--accent); }
 
 .badge { display: inline-block; padding: 0 .5rem; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); font-size: .85rem; }
 .badge.online, .badge.broadcasting { color: var(--accent); border-color: var(--accent); }
 .badge.offline, .badge.error { color: var(--danger); border-color: var(--danger); }
-.badge.pingonly, .badge.connecting, .badge.starting { color: var(--warn); border-color: var(--warn); }
+.badge.starting { color: var(--warn); border-color: var(--warn); }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: .4rem; border-bottom: 1px solid var(--border); }
@@ -71,7 +72,7 @@ td.actions { display: flex; gap: .25rem; justify-content: flex-end; flex-wrap: w
 label { display: block; margin-bottom: .6rem; }
 label input:not([type=checkbox]) { display: block; width: 100%; margin-top: .2rem; }
 label.check { display: flex; gap: .5rem; align-items: center; }
-input { font: inherit; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+input, select { font: inherit; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
 .row { display: flex; gap: .5rem; flex-wrap: wrap; }
 .row input { flex: 1; min-width: 180px; }
 

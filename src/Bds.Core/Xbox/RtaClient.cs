@@ -19,6 +19,7 @@ public sealed class RtaClient(XboxAccount account, ILogger log) : IAsyncDisposab
 
     public event Action<string>? Closed;
     public event Action? SocialChanged;
+    public event Action? SessionChanged;
 
     public async Task<string> ConnectAsync(string xuid, CancellationToken ct)
     {
@@ -57,14 +58,25 @@ public sealed class RtaClient(XboxAccount account, ILogger log) : IAsyncDisposab
                 do
                 {
                     res = await _ws.ReceiveAsync(buf, ct);
-                    if (res.MessageType == WebSocketMessageType.Close) return;
+                    if (res.MessageType == WebSocketMessageType.Close)
+                    {
+                        reason = $"RTA closed ({res.CloseStatus} {res.CloseStatusDescription})";
+                        return;
+                    }
                     ms.Write(buf, 0, res.Count);
                 } while (!res.EndOfMessage);
-                Handle(JsonNode.Parse(ms.ToArray())?.AsArray());
+                try
+                {
+                    Handle(JsonNode.Parse(ms.ToArray())?.AsArray());
+                }
+                catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or FormatException)
+                {
+                    log.LogWarning("Ignoring RTA message {Message}: {Error}", Encoding.UTF8.GetString(ms.ToArray()), e.Message);
+                }
             }
         }
         catch (OperationCanceledException) { reason = "Stopped"; }
-        catch (Exception e) when (e is WebSocketException or System.Text.Json.JsonException)
+        catch (WebSocketException e)
         {
             reason = e.Message;
             log.LogWarning("RTA error: {Message}", e.Message);
@@ -79,12 +91,19 @@ public sealed class RtaClient(XboxAccount account, ILogger log) : IAsyncDisposab
     void Handle(JsonArray? msg)
     {
         if (msg is null || msg.Count < 2) return;
+        // [1, seq, code, ...] with a non-zero code is a failed subscribe.
+        if (msg[0]!.GetValue<int>() == 1 && msg.Count >= 3 && msg[2]!.GetValue<int>() != 0)
+            log.LogWarning("RTA subscribe failed: {Message}", msg.ToJsonString());
         var type = msg[0]!.GetValue<int>();
-        // [1, seq, status, {ConnectionId}] subscribe reply; [3, subId, payload] event.
-        if (type == 1 && msg.Count >= 4 && msg[3]?["ConnectionId"]?.GetValue<string>() is { } id)
+        // [1, seq, status, subId, {ConnectionId}] subscribe reply; [3, subId, payload] event.
+        if (type == 1 && msg.Count >= 5 && msg[4] is JsonObject payload && payload["ConnectionId"]?.GetValue<string>() is { } id)
             _connectionId.TrySetResult(id);
         else if (type == 3)
-            SocialChanged?.Invoke();
+        {
+            // Session subscriptions carry "ncid"; everything else is the friends subscription.
+            if (msg.Count >= 3 && msg[2] is JsonObject data && data.ContainsKey("ncid")) SessionChanged?.Invoke();
+            else SocialChanged?.Invoke();
+        }
     }
 
     public async ValueTask DisposeAsync()

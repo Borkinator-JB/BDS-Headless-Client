@@ -31,25 +31,11 @@ else
     </section>
 
     <section class="card">
-        <h2>Players (@Bridge.Bot.Players.Count)</h2>
-        @if (Bridge.Bot.State == BotState.PingOnly)
-        {
-            <p class="muted">Names unavailable: the bot could not join. Showing count from ping.</p>
-        }
-        <ul class="list">
-            @foreach (var p in Bridge.Bot.Players)
-            {
-                <li>@p.Name</li>
-            }
-        </ul>
-    </section>
-
-    <section class="card">
         <h2>Recent joins via Xbox</h2>
         <ul class="list">
             @foreach (var j in Bridge.Gateway.RecentJoins)
             {
-                <li>@j.Name <span class="muted">@j.Time.ToLocalTime().ToString("g")</span></li>
+                <li>@j.Name → @j.Server <span class="muted">@j.Time.ToLocalTime().ToString("g")</span></li>
             }
         </ul>
     </section>

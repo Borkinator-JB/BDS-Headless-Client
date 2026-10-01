@@ -2,16 +2,16 @@
 
 Lets Xbox and PlayStation friends join a Minecraft Bedrock server.
 
-A bot account joins your server. Friends of that account see it in their Friends tab, press **Join**, and end up on the same server.
+A bot account shows your server in its friends' Friends tab. They press **Join** and end up on your server.
 
 ## How it works
 
-1. The bot signs in with a Microsoft account and joins the selected server over RakNet. It reads the player list.
+1. The bot signs in with a Microsoft account and pings the selected server. It doesn't join it.
 2. It publishes a joinable Xbox Live session for that server.
 3. A friend presses Join. The console connects to the bot over NetherNet (WebRTC).
-4. The bot sends a `Transfer` packet, and the console connects to the server itself.
+4. The bot sends a `Transfer` packet, and the console connects to the server itself. A friend with an assigned server goes there instead.
 
-Use a separate Microsoft account for the bot. It needs Xbox friends with everyone who wants to join, and it needs access to the server (allowlist if you use one).
+Use a separate Microsoft account for the bot. It needs Xbox friends with everyone who wants to join.
 
 ## Install
 
@@ -42,7 +42,7 @@ Start the gateway from the main screen. It runs as a foreground service with a n
 
 1. **Account**: sign in. You get a code to enter on microsoft.com.
 2. **Servers**: add your server (e.g. `exampleserver.com`, port `19132`) and press **Join**. Only if you enter a local address (`127.0.0.1`, `192.168.x.x`), open **Advanced** and set the public address friends should use.
-3. **Friends**: add friends by gamertag, or turn on auto accept.
+3. **Friends**: add friends by gamertag, or turn on auto accept. To send a friend to another saved server, pick it next to their name (web) or tap them (Android). **Default** uses the active server.
 
 ## Security
 
@@ -70,7 +70,7 @@ Database changes: `dotnet tool restore`, then `dotnet ef migrations add <Name> -
 
 ## CI
 
-GitHub Actions builds every PR and push to `main`: tests, Linux (deb, rpm, tar.gz), Windows (setup + portable zip) and Android APK. Tagging `v*` creates a release.
+GitHub Actions builds every PR and push to `main`: tests, Linux (deb, rpm, tar.gz), Windows (setup + portable zip) and Android APK. Every merge to `main` publishes a release `v0.1.<build>` with all installers. Pushing a `v*` tag publishes a release with that version.
 
 Optional secrets for a release-signed APK: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`. Without them the APK uses the debug key.
 
@@ -81,5 +81,4 @@ Settings, Rules, Rulesets, New ruleset, **Import a ruleset**, and pick `.github/
 ## Limitations
 
 - Uses the same unofficial Xbox and Minecraft endpoints as other community tools. Mojang updates can break login or NetherNet until this is updated. Version-specific code lives in `src/Bds.Core/Protocol` and `src/Bds.Core/NetherNet`.
-- The bot takes one player slot.
-- Servers with an idle kick may kick the bot. Disable `player-idle-timeout` or exempt the account.
+- Friend routing trusts the XUID the console sends. It's a convenience, not access control.
