@@ -236,8 +236,10 @@ public sealed class FriendGateway(XboxAccount account, XboxHttp xbox, ServerBot 
                         await conn.DisposeAsync();
                         return;
                     }
-                    conn.LocalCandidate += c => _ = signaling.SendSignalAsync(signal.From,
-                        new Signal(signal.From, Signal.CandidateAdd, signal.ConnectionId, c), ct);
+                    conn.LocalCandidate += c => signaling.SendSignalAsync(signal.From,
+                        new Signal(signal.From, Signal.CandidateAdd, signal.ConnectionId, c), ct)
+                        .ContinueWith(t => _log.LogDebug("Candidate not sent: {Message}", t.Exception?.GetBaseException().Message),
+                            TaskContinuationOptions.OnlyOnFaulted);
                     var answer = await conn.AnswerAsync(signal.Data);
                     await signaling.SendSignalAsync(signal.From, new Signal(signal.From, Signal.ConnectResponse, signal.ConnectionId, answer), ct);
                     _ = RedirectAsync(conn, ct);

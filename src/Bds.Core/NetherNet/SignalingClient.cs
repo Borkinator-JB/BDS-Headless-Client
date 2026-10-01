@@ -35,7 +35,6 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
     const string ReceiveMessageMethod = "Signaling_ReceiveMessage_v1_0";
     const string SendClientMessageMethod = "Signaling_SendClientMessage_v1_0";
     const string WebRtcMethod = "Signaling_WebRtc_v1_0";
-    const string PingMethod = "System_Ping_v1_0";
     const string DeliveryMethod = "Signaling_DeliveryNotification_V1_0";
 
     ClientWebSocket? _ws;
@@ -60,9 +59,12 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
         _ws.Options.SetRequestHeader("Authorization", mcToken);
         _ws.Options.SetRequestHeader("session-id", Guid.NewGuid().ToString());
         _ws.Options.SetRequestHeader("request-id", Guid.NewGuid().ToString());
+        _ws.Options.SetRequestHeader("User-Agent", "libHttpClient/1.0.0.0");
+        // The server closed the socket right after our System_Ping requests, so keep alive at the WebSocket level.
+        _ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         await _ws.ConnectAsync(new Uri(Url), ct);
         _cts = new CancellationTokenSource();
-        _loops = Task.WhenAll(ReceiveLoopAsync(_cts.Token), PingLoopAsync(_cts.Token));
+        _loops = ReceiveLoopAsync(_cts.Token);
 
         var result = await RequestAsync(TurnAuthMethod, new JsonObject(), ct);
         return result?["TurnAuthServers"]?.AsArray().Select(s => new TurnServer(
@@ -115,34 +117,14 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
         await _sendLock.WaitAsync(ct);
         try
         {
-            await _ws.SendAsync(Encoding.UTF8.GetBytes(msg.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            var text = msg.ToJsonString();
+            log.LogInformation("Signal out: {Text}", Trim(text));
+            await _ws.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, ct);
         }
         finally
         {
             _sendLock.Release();
         }
-    }
-
-    async Task PingLoopAsync(CancellationToken ct)
-    {
-        // Timing and params match CloudburstMC's NetherNet transport.
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(30), ct);
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(50));
-            do
-            {
-                try
-                {
-                    await RequestAsync(PingMethod, new JsonObject(), ct);
-                }
-                catch (Exception e) when (e is TimeoutException or OperationCanceledException && !ct.IsCancellationRequested)
-                {
-                    log.LogDebug("Signaling ping timed out");
-                }
-            } while (await timer.WaitForNextTickAsync(ct));
-        }
-        catch (Exception e) when (e is OperationCanceledException or WebSocketException or IOException) { }
     }
 
     async Task ReceiveLoopAsync(CancellationToken ct)
@@ -166,6 +148,7 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
                     ms.Write(buf, 0, res.Count);
                 } while (!res.EndOfMessage);
 
+                log.LogInformation("Signal in: {Text}", Trim(Encoding.UTF8.GetString(ms.ToArray())));
                 var node = JsonNode.Parse(ms.ToArray());
                 if (node is JsonArray batch)
                     foreach (var item in batch) await HandleAsync(item, ct);
@@ -254,6 +237,9 @@ public sealed class SignalingClient(ILogger log) : IAsyncDisposable
             },
         }, ct);
     }
+
+    // Diagnostics while the server's close reason is unknown.
+    static string Trim(string text) => text.Length > 400 ? text[..400] + "…" : text;
 
     internal static string? ReadPmsgId(string mcToken)
     {
